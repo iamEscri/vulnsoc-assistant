@@ -1,7 +1,13 @@
 import requests
+from bs4 import BeautifulSoup
 
 NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+
+
+def _limpiar_html(texto: str) -> str:
+    """Elimina etiquetas HTML de la descripcion del NVD."""
+    return BeautifulSoup(texto, "html.parser").get_text(separator=" ").strip()
 
 
 def obtener_datos_nvd(cve_id: str) -> dict:
@@ -33,11 +39,11 @@ def obtener_datos_nvd(cve_id: str) -> dict:
             cvss_score = metrics["cvssMetricV2"][0]["cvssData"]["baseScore"]
             cvss_version = "2.0"
 
-        # Descripción en inglés
+        # Descripcion en ingles — limpia de HTML
         descripcion = ""
         for desc in cve.get("descriptions", []):
             if desc["lang"] == "en":
-                descripcion = desc["value"]
+                descripcion = _limpiar_html(desc["value"])
                 break
 
         return {
@@ -55,7 +61,7 @@ def obtener_datos_nvd(cve_id: str) -> dict:
 
 
 def comprobar_cisa_kev(cve_id: str) -> dict:
-    """Comprueba si el CVE está en el catálogo CISA KEV."""
+    """Comprueba si el CVE esta en el catalogo CISA KEV."""
     try:
         response = requests.get(CISA_KEV_URL, timeout=15)
         response.raise_for_status()
@@ -78,7 +84,7 @@ def comprobar_cisa_kev(cve_id: str) -> dict:
 
 
 def analizar_cve(cve_id: str) -> dict:
-    """Función principal: obtiene todos los datos de un CVE."""
+    """Funcion principal: obtiene todos los datos de un CVE."""
     print(f"Consultando NVD para {cve_id}...")
     datos_nvd = obtener_datos_nvd(cve_id)
 
