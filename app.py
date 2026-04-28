@@ -28,7 +28,7 @@ with col1:
 with col2:
     st.write("")
     st.write("")
-    analizar = st.button("🔍 Analizar", type="primary", use_container_width=True)
+    analizar = st.button("Analizar", type="primary", use_container_width=True)
 
 # ── ANALISIS ───────────────────────────────────────────────────────────────
 if analizar and cve_id:
