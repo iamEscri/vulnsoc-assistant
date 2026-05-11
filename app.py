@@ -30,6 +30,9 @@ if "resultado" not in st.session_state:
     st.session_state.analisis = None
     st.session_state.cve_analizado = None
 
+if "historial" not in st.session_state:
+    st.session_state.historial = []
+
 # ── ENTRADA DEL USUARIO ────────────────────────────────────────────────────
 col1, col2 = st.columns([3, 1])
 with col1:
@@ -65,6 +68,27 @@ if analizar and cve_id:
     st.session_state.score = score
     st.session_state.analisis = analisis
     st.session_state.cve_analizado = cve_id
+
+    # ── GUARDAR EN HISTORIAL DE SESIÓN ─────────────────────────────────────
+    # Evitamos duplicados: si el CVE ya está en el historial, lo actualizamos
+    ids_en_historial = [e["cve_id"] for e in st.session_state.historial]
+    entrada = {
+        "cve_id": cve_id,
+        "score_mostrado": score["score_mostrado"],
+        "score_interno": score["score_interno"],
+        "prioridad": score["prioridad"],
+        "tipo": score.get("tipo_vulnerabilidad", "Desconocido"),
+        "en_kev": resultado["kev"].get("en_kev", False),
+        "epss_score": score.get("epss_score", 0),
+        "resultado": resultado,
+        "score": score,
+        "analisis": analisis,
+    }
+    if cve_id in ids_en_historial:
+        idx = ids_en_historial.index(cve_id)
+        st.session_state.historial[idx] = entrada
+    else:
+        st.session_state.historial.insert(0, entrada)  # más reciente primero
 
 # ── MOSTRAR RESULTADOS ─────────────────────────────────────────────────────
 if st.session_state.resultado:
