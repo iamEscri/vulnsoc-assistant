@@ -4,6 +4,13 @@ from modules.scoring import calcular_score
 from modules.analisis_ia import generar_analisis
 from modules.exportar_pdf import generar_pdf
 
+# ── RECOGER CVE DESDE PAGINA DE BUSQUEDA ──────────────────────────────────
+if "cve_desde_busqueda" in st.session_state and st.session_state.cve_desde_busqueda:
+    cve_preseleccionado = st.session_state.cve_desde_busqueda
+    st.session_state.cve_desde_busqueda = None
+else:
+    cve_preseleccionado = ""
+
 st.set_page_config(
     page_title="VulnSOC Assistant",
     page_icon="🛡️",
@@ -14,10 +21,19 @@ st.title("🛡️ VulnSOC Assistant")
 st.caption("Sistema inteligente de análisis y priorización de vulnerabilidades para SOC")
 st.divider()
 
+# ── SESSION STATE ──────────────────────────────────────────────────────────
+if "resultado" not in st.session_state:
+    st.session_state.resultado = None
+    st.session_state.score = None
+    st.session_state.analisis = None
+    st.session_state.cve_analizado = None
+
+# ── ENTRADA DEL USUARIO ────────────────────────────────────────────────────
 col1, col2 = st.columns([3, 1])
 with col1:
     cve_id = st.text_input(
         "Introduce el CVE a analizar",
+        value=cve_preseleccionado,
         placeholder="CVE-2021-44228",
         help="Formato: CVE-AÑO-NÚMERO"
     )
@@ -26,13 +42,7 @@ with col2:
     st.write("")
     analizar = st.button("🔍 Analizar", type="primary", use_container_width=True)
 
-# ── SESSION STATE — guarda los resultados entre rerenders ──────────────────
-if "resultado" not in st.session_state:
-    st.session_state.resultado = None
-    st.session_state.score = None
-    st.session_state.analisis = None
-    st.session_state.cve_analizado = None
-
+# ── ANALISIS ───────────────────────────────────────────────────────────────
 if analizar and cve_id:
     cve_id = cve_id.strip().upper()
 

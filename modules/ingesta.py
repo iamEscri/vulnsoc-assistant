@@ -145,3 +145,58 @@ def analizar_cve(cve_id: str) -> dict:
         "kev": datos_kev,
         "epss": datos_epss
     }
+
+def buscar_cves_por_descripcion(termino: str, max_resultados: int = 10) -> dict:
+    """
+    Busca CVEs en el NVD por descripcion o termino tecnico.
+    Devuelve los CVEs mas relevantes con su informacion basica.
+    """
+    try:
+        params = {
+            "keywordSearch": termino,
+            "resultsPerPage": max_resultados,
+            "startIndex": 0
+        }
+
+        response = requests.get(NVD_BASE_URL, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        total = data.get("totalResults", 0)
+        vulnerabilidades = data.get("vulnerabilities", [])
+
+        cves = []
+        for vuln in vulnerabilidades:
+            cve = vuln["cve"]
+
+            # CVSS score
+            cvss_score = None
+            metrics = cve.get("metrics", {})
+            if "cvssMetricV31" in metrics:
+                cvss_score = metrics["cvssMetricV31"][0]["cvssData"]["baseScore"]
+            elif "cvssMetricV30" in metrics:
+                cvss_score = metrics["cvssMetricV30"][0]["cvssData"]["baseScore"]
+            elif "cvssMetricV2" in metrics:
+                cvss_score = metrics["cvssMetricV2"][0]["cvssData"]["baseScore"]
+
+            # Descripcion en ingles
+            descripcion = ""
+            for desc in cve.get("descriptions", []):
+                if desc["lang"] == "en":
+                    descripcion = _limpiar_html(desc["value"])
+                    break
+
+            cves.append({
+                "cve_id": cve["id"],
+                "descripcion": descripcion,
+                "cvss_score": cvss_score or "N/A",
+                "fecha_publicacion": cve.get("published", ""),
+            })
+
+        return {
+            "total": total,
+            "cves": cves
+        }
+
+    except requests.exceptions.RequestException as e:
+        return {"error": f"Error al buscar en NVD: {str(e)}", "cves": []}
