@@ -26,8 +26,11 @@ st.divider()
 # ── SESSION STATE ──────────────────────────────────────────────────────────
 if "resultado" not in st.session_state:
     st.session_state.resultado = None
+if "score" not in st.session_state:
     st.session_state.score = None
+if "analisis" not in st.session_state:
     st.session_state.analisis = None
+if "cve_analizado" not in st.session_state:
     st.session_state.cve_analizado = None
 
 if "historial" not in st.session_state:
@@ -153,13 +156,22 @@ if st.session_state.resultado:
     ])
 
     with tab1:
-        st.markdown(analisis.get("resumen_ejecutivo", "No disponible"))
+        if analisis.get("error"):
+            st.error(f"❌ El análisis IA no está disponible: {analisis['error']}")
+        else:
+            st.markdown(analisis.get("resumen_ejecutivo", "No disponible"))
 
     with tab2:
-        st.markdown(analisis.get("analisis_tecnico", "No disponible"))
+        if analisis.get("error"):
+            st.error(f"❌ El análisis IA no está disponible: {analisis['error']}")
+        else:
+            st.markdown(analisis.get("analisis_tecnico", "No disponible"))
 
     with tab3:
-        st.markdown(analisis.get("plan_mitigacion", "No disponible"))
+        if analisis.get("error"):
+            st.error(f"❌ El análisis IA no está disponible: {analisis['error']}")
+        else:
+            st.markdown(analisis.get("plan_mitigacion", "No disponible"))
 
     with tab4:
         st.subheader("Puntuaciones")

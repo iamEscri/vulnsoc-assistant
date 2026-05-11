@@ -13,16 +13,63 @@ st.divider()
 # ── QUE ES ────────────────────────────────────────────────────────────────
 st.header("¿Qué es VulnSOC Assistant?")
 st.markdown("""
-VulnSOC Assistant es una herramienta de análisis de vulnerabilidades diseñada para 
-analistas de SOC. Automatiza el proceso de análisis de CVEs que normalmente puede 
+VulnSOC Assistant es una herramienta de análisis de vulnerabilidades diseñada para
+analistas de SOC. Automatiza el proceso de análisis de CVEs que normalmente puede
 tardar entre 2 y 4 horas, reduciéndolo a segundos.
 
 Dado un CVE, el sistema:
-- Obtiene datos reales de fuentes oficiales (NVD y CISA KEV)
+- Obtiene datos reales de fuentes oficiales (NVD, CISA KEV y EPSS)
 - Calcula una puntuación de prioridad propia que supera las limitaciones del CVSS
 - Genera un análisis completo en lenguaje natural usando IA
 - Exporta el informe completo en PDF
 """)
+
+st.divider()
+
+# ── FUNCIONALIDADES ───────────────────────────────────────────────────────
+st.header("Funcionalidades")
+
+f1, f2, f3, f4, f5 = st.columns(5)
+
+with f1:
+    st.markdown("""
+    **🔍 Análisis individual**
+
+    Introduce un CVE y obtén en segundos scoring, análisis IA completo
+    e informe PDF descargable.
+    """)
+
+with f2:
+    st.markdown("""
+    **🔎 Búsqueda por descripción**
+
+    Busca CVEs por texto libre en NVD. Útil cuando no conoces el
+    identificador exacto.
+    """)
+
+with f3:
+    st.markdown("""
+    **📋 Análisis múltiple**
+
+    Analiza varios CVEs a la vez y obtén una tabla comparativa
+    ordenada por prioridad real.
+    """)
+
+with f4:
+    st.markdown("""
+    **🗂️ Historial de sesión**
+
+    Todos los CVEs analizados quedan registrados en la sesión.
+    Puedes volver a cargar cualquiera sin repetir el análisis.
+    """)
+
+with f5:
+    st.markdown("""
+    **📥 Exportación PDF**
+
+    Informe profesional con métricas, factores de scoring,
+    análisis IA y plan de mitigación.
+    """)
 
 st.divider()
 
@@ -36,7 +83,7 @@ with col1:
     st.markdown("""
     Base de datos oficial del gobierno de EEUU con todos los CVEs registrados.
     Proporciona descripción técnica, puntuación CVSS, fechas y referencias.
-    
+
     **URL:** services.nvd.nist.gov
     """)
 
@@ -45,16 +92,16 @@ with col2:
     st.markdown("""
     Catálogo de vulnerabilidades con explotación activa confirmada en el mundo real.
     Si un CVE está aquí, es urgente independientemente de su CVSS.
-    
+
     **URL:** cisa.gov/known-exploited-vulnerabilities
     """)
 
 with col3:
     st.subheader("📊 EPSS (FIRST.org)")
     st.markdown("""
-    Exploit Prediction Scoring System. Probabilidad real de que un CVE sea 
+    Exploit Prediction Scoring System. Probabilidad real de que un CVE sea
     explotado en los próximos 30 días, basada en datos de amenazas actuales.
-    
+
     **URL:** api.first.org/data/v1/epss
     """)
 
@@ -76,6 +123,7 @@ factores = [
     ("Tipo RCE",                "+25",      "Ejecución remota de código — control total del sistema."),
     ("Tipo PrivEsc",            "+18",      "Escalada de privilegios."),
     ("Tipo SQLi",               "+15",      "Inyección SQL."),
+    ("Tipo PathTrav",           "+12",      "Path traversal — acceso a ficheros fuera del directorio raíz."),
     ("Tipo XSS",                "+10",      "Cross-site scripting."),
     ("Tipo DoS",                "+8",       "Denegación de servicio."),
     ("Vector NETWORK",          "+15",      "Explotable remotamente sin acceso físico."),
@@ -114,11 +162,11 @@ with col1:
     st.subheader("Score interno")
     st.markdown("""
     Puntuación real acumulada **sin límite superior**.
-    Se usa para ordenar CVEs entre sí cuando varios 
+    Se usa para ordenar CVEs entre sí cuando varios
     alcanzan el máximo en score mostrado.
-    
-    Ejemplo: dos CVEs con score mostrado 100 pueden 
-    tener score interno 203 y 183 — el primero es más urgente.
+
+    Ejemplo: Log4Shell tiene score interno 225 y PrintNightmare 203.
+    Ambos muestran 100/100, pero el interno revela cuál es más urgente.
     """)
 
 with col2:
@@ -126,8 +174,8 @@ with col2:
     st.markdown("""
     Score capado a 100 con `min(score_interno, 100)`.
     Estable y directamente comparable con el estándar CVSS.
-    
-    Se descartó la normalización proporcional (dividir por 
+
+    Se descartó la normalización proporcional (dividir por
     un máximo teórico) por ser frágil ante cambios en el modelo.
     """)
 
@@ -160,6 +208,7 @@ with col1:
     - Módulo de ingesta (NVD + KEV + EPSS)
     - Motor de scoring propio
     - Control de alucinaciones IA
+    - Exportación PDF (ReportLab)
     """)
 
 with col2:
@@ -177,8 +226,21 @@ with col3:
     - Streamlit (interfaz web)
     - Streamlit Community Cloud
     - GitHub (control de versiones)
-    - ReportLab (exportación PDF)
     """)
+
+st.divider()
+
+# ── LIMITACIONES CONOCIDAS ────────────────────────────────────────────────
+st.header("Limitaciones conocidas")
+
+st.markdown("""
+| Limitación | Causa | Solución en producción |
+|---|---|---|
+| Historial se pierde al recargar | `session_state` de Streamlit es volátil | Base de datos persistente (SQLite, PostgreSQL) |
+| Límite de 100K tokens/día en IA | Tier gratuito de Groq | Tier de pago o modelo local (Ollama) |
+| Timeouts ocasionales en NVD | Rate limiting de la API pública del NIST | API key de NVD o caché local |
+| Análisis múltiple secuencial | Llamadas a APIs en serie | Procesamiento paralelo con `asyncio` |
+""")
 
 st.divider()
 st.caption("VulnSOC Assistant · TFM Máster en Ciberseguridad · iamEscri · 2026")
