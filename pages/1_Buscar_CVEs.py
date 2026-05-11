@@ -7,10 +7,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Si hay un CVE seleccionado redirigir a la pagina principal
-if "cve_desde_busqueda" in st.session_state and st.session_state.cve_desde_busqueda:
-    st.switch_page("app.py")
-
 st.title("🔍 Buscar CVEs por descripción")
 st.caption("Introduce una descripción o término técnico y el sistema buscará CVEs relacionados en el NVD.")
 st.divider()
@@ -42,9 +38,10 @@ if buscar and termino:
         for cve in resultados["cves"]:
             with st.expander(f"**{cve['cve_id']}** — CVSS {cve['cvss_score']} — {cve['fecha_publicacion'][:10]}"):
                 st.write(cve["descripcion"])
-                if st.button(f"📊 Analizar {cve['cve_id']}", key=cve["cve_id"]):
-                    st.session_state.cve_desde_busqueda = cve["cve_id"]
-                    st.rerun()
+                st.markdown(
+                    f"[📊 Analizar {cve['cve_id']} →](/?cve={cve['cve_id']})",
+                    unsafe_allow_html=True
+                )
 
 elif buscar and not termino:
     st.warning("Introduce un término de búsqueda.")

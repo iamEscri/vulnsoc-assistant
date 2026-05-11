@@ -4,12 +4,14 @@ from modules.scoring import calcular_score
 from modules.analisis_ia import generar_analisis
 from modules.exportar_pdf import generar_pdf
 
-# ── RECOGER CVE DESDE PAGINA DE BUSQUEDA ──────────────────────────────────
-if "cve_desde_busqueda" in st.session_state and st.session_state.cve_desde_busqueda:
-    cve_preseleccionado = st.session_state.cve_desde_busqueda
-    st.session_state.cve_desde_busqueda = None
-else:
-    cve_preseleccionado = ""
+# ── RECOGER CVE DESDE URL O SESSION STATE ─────────────────────────────────
+params = st.query_params
+cve_preseleccionado = params.get("cve", "")
+
+if not cve_preseleccionado:
+    if "cve_desde_busqueda" in st.session_state and st.session_state.cve_desde_busqueda:
+        cve_preseleccionado = st.session_state.cve_desde_busqueda
+        st.session_state.cve_desde_busqueda = None
 
 st.set_page_config(
     page_title="VulnSOC Assistant",

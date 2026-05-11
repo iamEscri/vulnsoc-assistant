@@ -55,6 +55,12 @@ def obtener_datos_nvd(cve_id: str) -> dict:
             m = metrics["cvssMetricV2"][0]
             cvss_score = m["cvssData"]["baseScore"]
             cvss_version = "2.0"
+            vector_ataque = {
+                "attackVector":       m["cvssData"].get("accessVector", ""),
+                "attackComplexity":   m["cvssData"].get("accessComplexity", ""),
+                "privilegesRequired": m["cvssData"].get("authentication", ""),
+                "userInteraction":    "N/A (CVSS v2)",
+            }
 
         # Extraer CWE (tipo de vulnerabilidad)
         cwes = []
@@ -145,6 +151,7 @@ def analizar_cve(cve_id: str) -> dict:
         "kev": datos_kev,
         "epss": datos_epss
     }
+
 
 def buscar_cves_por_descripcion(termino: str, max_resultados: int = 10) -> dict:
     """
