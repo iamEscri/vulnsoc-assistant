@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 
 NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+EPSS_URL = "https://api.first.org/data/v1/epss"
 
 
 def _limpiar_html(texto: str) -> str:
@@ -24,22 +25,45 @@ def obtener_datos_nvd(cve_id: str) -> dict:
 
         cve = data["vulnerabilities"][0]["cve"]
 
-        # Extraer CVSS score (v3 preferente, v2 como fallback)
+        # Extraer CVSS score y vector completo
         cvss_score = None
         cvss_version = None
+        vector_ataque = {}
 
         metrics = cve.get("metrics", {})
         if "cvssMetricV31" in metrics:
-            cvss_score = metrics["cvssMetricV31"][0]["cvssData"]["baseScore"]
+            m = metrics["cvssMetricV31"][0]
+            cvss_score = m["cvssData"]["baseScore"]
             cvss_version = "3.1"
+            vector_ataque = {
+                "attackVector":       m["cvssData"].get("attackVector", ""),
+                "attackComplexity":   m["cvssData"].get("attackComplexity", ""),
+                "privilegesRequired": m["cvssData"].get("privilegesRequired", ""),
+                "userInteraction":    m["cvssData"].get("userInteraction", ""),
+            }
         elif "cvssMetricV30" in metrics:
-            cvss_score = metrics["cvssMetricV30"][0]["cvssData"]["baseScore"]
+            m = metrics["cvssMetricV30"][0]
+            cvss_score = m["cvssData"]["baseScore"]
             cvss_version = "3.0"
+            vector_ataque = {
+                "attackVector":       m["cvssData"].get("attackVector", ""),
+                "attackComplexity":   m["cvssData"].get("attackComplexity", ""),
+                "privilegesRequired": m["cvssData"].get("privilegesRequired", ""),
+                "userInteraction":    m["cvssData"].get("userInteraction", ""),
+            }
         elif "cvssMetricV2" in metrics:
-            cvss_score = metrics["cvssMetricV2"][0]["cvssData"]["baseScore"]
+            m = metrics["cvssMetricV2"][0]
+            cvss_score = m["cvssData"]["baseScore"]
             cvss_version = "2.0"
 
-        # Descripcion en ingles — limpia de HTML
+        # Extraer CWE (tipo de vulnerabilidad)
+        cwes = []
+        for weakness in cve.get("weaknesses", []):
+            for desc in weakness.get("description", []):
+                if desc.get("lang") == "en" and desc.get("value", "").startswith("CWE-"):
+                    cwes.append(desc["value"])
+
+        # Descripcion limpia
         descripcion = ""
         for desc in cve.get("descriptions", []):
             if desc["lang"] == "en":
@@ -51,6 +75,8 @@ def obtener_datos_nvd(cve_id: str) -> dict:
             "descripcion": descripcion,
             "cvss_score": cvss_score,
             "cvss_version": cvss_version,
+            "vector_ataque": vector_ataque,
+            "cwes": cwes,
             "fecha_publicacion": cve.get("published", ""),
             "fecha_modificacion": cve.get("lastModified", ""),
             "referencias": [r["url"] for r in cve.get("references", [])[:5]]
@@ -83,6 +109,26 @@ def comprobar_cisa_kev(cve_id: str) -> dict:
         return {"error": f"Error al conectar con CISA KEV: {str(e)}"}
 
 
+def obtener_epss(cve_id: str) -> dict:
+    """Consulta la API de EPSS para obtener la probabilidad de explotacion."""
+    try:
+        response = requests.get(EPSS_URL, params={"cve": cve_id}, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        if data.get("data"):
+            epss = data["data"][0]
+            return {
+                "epss_score": float(epss.get("epss", 0)),
+                "percentil": float(epss.get("percentile", 0))
+            }
+
+        return {"epss_score": 0.0, "percentil": 0.0}
+
+    except requests.exceptions.RequestException as e:
+        return {"epss_score": 0.0, "percentil": 0.0, "error": str(e)}
+
+
 def analizar_cve(cve_id: str) -> dict:
     """Funcion principal: obtiene todos los datos de un CVE."""
     print(f"Consultando NVD para {cve_id}...")
@@ -91,7 +137,11 @@ def analizar_cve(cve_id: str) -> dict:
     print(f"Comprobando CISA KEV para {cve_id}...")
     datos_kev = comprobar_cisa_kev(cve_id)
 
+    print(f"Consultando EPSS para {cve_id}...")
+    datos_epss = obtener_epss(cve_id)
+
     return {
         "nvd": datos_nvd,
-        "kev": datos_kev
+        "kev": datos_kev,
+        "epss": datos_epss
     }
