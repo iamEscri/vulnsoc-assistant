@@ -2,6 +2,7 @@ import streamlit as st
 from modules.ingesta import analizar_cve
 from modules.scoring import calcular_score
 from modules.analisis_ia import generar_analisis
+from modules.exportar_pdf import generar_pdf
 
 # ── CONFIGURACION DE LA PAGINA ─────────────────────────────────────────────
 st.set_page_config(
@@ -83,6 +84,19 @@ if analizar and cve_id:
     if analisis.get("alucinacion_detectada"):
         st.warning("⚠️ Se detectó posible información externa en el análisis. Revisa manualmente.")
 
+    # ── BOTON DESCARGA PDF ─────────────────────────────────────────────────
+    st.divider()
+    pdf_bytes = generar_pdf(
+        resultado["nvd"], resultado["kev"],
+        resultado["epss"], score, analisis
+    )
+    st.download_button(
+        label="📥 Descargar informe PDF",
+        data=pdf_bytes,
+        file_name=f"vulnsoc_{cve_id}.pdf",
+        mime="application/pdf"
+    )
+
     st.divider()
 
     # ── TABS ───────────────────────────────────────────────────────────────
@@ -104,7 +118,6 @@ if analizar and cve_id:
         st.markdown(analisis.get("plan_mitigacion", "No disponible"))
 
     with tab4:
-        # Scores comparativos
         st.subheader("Puntuaciones")
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -123,12 +136,11 @@ if analizar and cve_id:
             st.metric(
                 "CVSS puro",
                 f"{score.get('score_cvss_puro', 0)}/100",
-                help="Solo el CVSS base sin ningún factor contextual. Para comparar con el sistema propio."
+                help="Solo el CVSS base sin ningún factor contextual."
             )
 
         st.divider()
 
-        # Factores activos
         st.subheader("Factores activos")
         factores = score.get("factores", [])
         if factores:
@@ -140,12 +152,9 @@ if analizar and cve_id:
                     st.write(f"➕ {factor['puntos']} pts")
                 with col_detalle:
                     st.write(factor['detalle'])
-        else:
-            st.write("No hay factores registrados.")
 
         st.divider()
 
-        # Vector de ataque
         st.subheader("Vector de ataque")
         vector = resultado["nvd"].get("vector_ataque", {})
         if vector:
@@ -171,7 +180,6 @@ if analizar and cve_id:
 
         st.divider()
 
-        # EPSS detalle
         st.subheader("EPSS — Probabilidad de explotación")
         e1, e2 = st.columns(2)
         with e1:
