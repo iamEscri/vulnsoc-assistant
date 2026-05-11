@@ -9,8 +9,8 @@ params = st.query_params
 cve_preseleccionado = params.get("cve", "")
 
 if not cve_preseleccionado:
-    if "cve_desde_busqueda" in st.session_state and st.session_state.cve_desde_busqueda:
-        cve_preseleccionado = st.session_state.cve_desde_busqueda
+    cve_preseleccionado = st.session_state.get("cve_desde_busqueda", "")
+    if cve_preseleccionado:
         st.session_state.cve_desde_busqueda = None
 
 st.set_page_config(
