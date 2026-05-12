@@ -188,3 +188,88 @@ las instrucciones del proveedor segun las referencias proporcionadas.
 
     except Exception as e:
         return {"error": f"Error con proveedor {IA_PROVIDER}: {str(e)}"}
+
+def generar_regla_sigma(datos_nvd: dict, datos_kev: dict) -> dict:
+    """
+    Genera una regla Sigma para el CVE dado.
+    Primero busca en SigmaHQ (reglas validadas por la comunidad).
+    Si no existe, la genera con IA marcándola como borrador.
+    """
+    import requests
+
+    cve_id      = datos_nvd.get("cve_id", "")
+    descripcion = datos_nvd.get("descripcion", "")
+    cwes        = datos_nvd.get("cwes", [])
+
+    # ── 1. BUSCAR EN SIGNAHQ ───────────────────────────────────────────────
+    # Buscamos el CVE ID en el repositorio oficial SigmaHQ/sigma via GitHub API
+    try:
+        gh_url = "https://api.github.com/search/code"
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        params  = {"q": f"{cve_id} repo:SigmaHQ/sigma", "per_page": 3}
+        resp = requests.get(gh_url, headers=headers, params=params, timeout=10)
+
+        if resp.status_code == 200:
+            items = resp.json().get("items", [])
+            if items:
+                # Descargamos el contenido del primer resultado
+                raw_url = items[0]["html_url"].replace(
+                    "github.com", "raw.githubusercontent.com"
+                ).replace("/blob/", "/")
+                raw_resp = requests.get(raw_url, timeout=10)
+                if raw_resp.status_code == 200:
+                    return {
+                        "origen": "sigmaHQ",
+                        "url_fuente": items[0]["html_url"],
+                        "regla": raw_resp.text,
+                        "advertencia": None
+                    }
+    except Exception:
+        pass  # Si falla la búsqueda en GitHub, continuamos con IA
+
+    # ── 2. GENERAR CON IA ──────────────────────────────────────────────────
+    prompt_sigma = f"""
+Eres un experto en detección de amenazas y formato Sigma.
+
+Genera UNA regla Sigma en formato YAML válido para detectar intentos de explotación
+de la siguiente vulnerabilidad. La regla debe seguir estrictamente la especificación
+Sigma (https://github.com/SigmaHQ/sigma).
+
+Vulnerabilidad:
+- CVE ID: {cve_id}
+- Descripción: {descripcion}
+- CWEs: {', '.join(cwes) if cwes else 'No disponible'}
+- En CISA KEV (explotación activa): {datos_kev.get('en_kev', False)}
+
+INSTRUCCIONES ESTRICTAS:
+- Responde ÚNICAMENTE con el bloque YAML de la regla Sigma, sin explicaciones.
+- Incluye los campos: title, id, status, description, references, author, date,
+  tags (con el CVE), logsource, detection y falsepositives.
+- Marca status como: experimental
+- El campo id debe ser un UUID v4 generado aleatoriamente.
+- No añadas texto fuera del bloque YAML.
+"""
+
+    try:
+        regla_yaml = _llamar_ia(prompt_sigma)
+
+        # Limpiar posibles bloques de código markdown que el LLM añada
+        regla_yaml = regla_yaml.strip()
+        if regla_yaml.startswith("```"):
+            lineas = regla_yaml.splitlines()
+            regla_yaml = "\n".join(
+                l for l in lineas if not l.startswith("```")
+            ).strip()
+
+        return {
+            "origen": "ia_generada",
+            "url_fuente": None,
+            "regla": regla_yaml,
+            "advertencia": (
+                "⚠️ Esta regla ha sido generada por IA y NO ha sido validada. "
+                "Requiere revisión técnica por un analista antes de desplegarse en producción."
+            )
+        }
+
+    except Exception as e:
+        return {"error": f"Error generando regla Sigma: {str(e)}"}

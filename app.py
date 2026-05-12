@@ -1,7 +1,7 @@
 import streamlit as st
 from modules.ingesta import analizar_cve
 from modules.scoring import calcular_score
-from modules.analisis_ia import generar_analisis
+from modules.analisis_ia import generar_analisis, generar_regla_sigma
 from modules.exportar_pdf import generar_pdf
 
 # ── RECOGER CVE DESDE URL O SESSION STATE ─────────────────────────────────
@@ -196,11 +196,12 @@ if st.session_state.resultado:
 
     st.divider()
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📋 Resumen ejecutivo",
         "🔬 Análisis técnico",
         "🛠️ Plan de mitigación",
         "📊 Scoring detallado",
+        "🔎 Regla Sigma",
         "📄 Datos brutos"
     ])
 
@@ -274,6 +275,42 @@ if st.session_state.resultado:
             st.metric("Percentil", f"Top {100 - round(percentil * 100)}%")
 
     with tab5:
+        st.subheader("🔎 Regla Sigma de detección")
+
+        # Generamos la regla solo cuando el usuario entra en esta pestaña
+        if "sigma_cve" not in st.session_state or st.session_state.sigma_cve != cve_id:
+            with st.spinner("Buscando en SigmaHQ y generando regla..."):
+                sigma = generar_regla_sigma(resultado["nvd"], resultado["kev"])
+                st.session_state.sigma = sigma
+                st.session_state.sigma_cve = cve_id
+        else:
+            sigma = st.session_state.sigma
+
+        if "error" in sigma:
+            st.error(sigma["error"])
+        else:
+            if sigma["origen"] == "sigmaHQ":
+                st.success(
+                    f"✅ **Regla obtenida de SigmaHQ** — Validada por la comunidad. "
+                    f"[Ver fuente original]({sigma['url_fuente']})"
+                )
+            else:
+                st.warning(sigma["advertencia"])
+                st.caption(
+                    "Esta regla es un punto de partida. "
+                    "Debe ser revisada y adaptada al entorno antes de desplegarse en un SIEM."
+                )
+
+            st.code(sigma["regla"], language="yaml")
+
+            st.download_button(
+                label="⬇️ Descargar regla (.yml)",
+                data=sigma["regla"],
+                file_name=f"sigma_{cve_id}.yml",
+                mime="text/yaml"
+            )
+
+    with tab6:
         st.subheader("Datos NVD")
         st.json(resultado["nvd"])
         st.subheader("Datos CISA KEV")
