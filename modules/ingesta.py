@@ -76,6 +76,37 @@ def obtener_datos_nvd(cve_id: str) -> dict:
                 descripcion = _limpiar_html(desc["value"])
                 break
 
+        # Productos afectados — extraemos vendor y producto de los CPEs vulnerables
+        productos_afectados = []
+        for config in cve.get("configurations", []):
+            for node in config.get("nodes", []):
+                for match in node.get("cpeMatch", []):
+                    if match.get("vulnerable", False):
+                        criteria = match.get("criteria", "")
+                        partes = criteria.split(":")
+                        if len(partes) >= 5:
+                            vendor  = partes[3].replace("_", " ")
+                            producto = partes[4].replace("_", " ")
+                            entrada = f"{vendor} {producto}".strip()
+                            if entrada and entrada not in productos_afectados:
+                                productos_afectados.append(entrada)
+
+        # Referencias completas con sus etiquetas (patch, vendor advisory, etc.)
+        referencias_completas = []
+        for r in cve.get("references", []):
+            referencias_completas.append({
+                "url":  r.get("url", ""),
+                "tags": r.get("tags", [])
+            })
+
+        # Estado de parche — buscamos referencias con tag Patch, Vendor Advisory o Mitigation
+        tags_parche = {"Patch", "Vendor Advisory", "Mitigation"}
+        refs_parche = [
+            r["url"] for r in referencias_completas
+            if tags_parche.intersection(set(r["tags"]))
+        ]
+        parche_disponible = len(refs_parche) > 0
+
         return {
             "cve_id": cve_id,
             "descripcion": descripcion,
@@ -85,7 +116,10 @@ def obtener_datos_nvd(cve_id: str) -> dict:
             "cwes": cwes,
             "fecha_publicacion": cve.get("published", ""),
             "fecha_modificacion": cve.get("lastModified", ""),
-            "referencias": [r["url"] for r in cve.get("references", [])[:5]]
+            "referencias": [r["url"] for r in referencias_completas[:5]],
+            "parche_disponible": parche_disponible,
+            "refs_parche": refs_parche[:3],
+            "productos_afectados": productos_afectados[:20],
         }
 
     except requests.exceptions.RequestException as e:

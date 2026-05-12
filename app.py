@@ -132,6 +132,19 @@ if st.session_state.resultado:
     if analisis.get("alucinacion_detectada"):
         st.warning("⚠️ Se detectó posible información externa en el análisis. Revisa manualmente.")
 
+    # ── ESTADO DE PARCHE ───────────────────────────────────────────────────
+    parche_disponible = resultado["nvd"].get("parche_disponible", None)
+    refs_parche = resultado["nvd"].get("refs_parche", [])
+
+    if parche_disponible is True:
+        msg = "✅ **Parche disponible** — Se han encontrado referencias oficiales de parche o mitigación."
+        st.success(msg)
+        if refs_parche:
+            for url in refs_parche:
+                st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;🔗 [{url}]({url})")
+    elif parche_disponible is False:
+        st.error("❌ **Sin parche oficial conocido** — No se encontraron referencias de parche en NVD. Aplica mitigaciones temporales.")
+
     st.divider()
 
     pdf_bytes = generar_pdf(
@@ -144,6 +157,42 @@ if st.session_state.resultado:
         file_name=f"vulnsoc_{cve_id}.pdf",
         mime="application/pdf"
     )
+
+    # ── INVENTARIO DE ACTIVOS — ¿te afecta este CVE? ─────────────────────────
+    inventario = st.session_state.get("inventario", {})
+    productos_afectados = resultado["nvd"].get("productos_afectados", [])
+
+    # Construir lista plana de tecnologías del inventario para comparar
+    tecnologias_empresa = set()
+    for item in inventario.get("sistemas_operativos", []):
+        tecnologias_empresa.update(item.lower().split())
+    for item in inventario.get("software", []):
+        tecnologias_empresa.update(item.lower().split())
+    for linea in inventario.get("personalizado", "").splitlines():
+        if linea.strip():
+            tecnologias_empresa.update(linea.strip().lower().split())
+
+    if tecnologias_empresa and productos_afectados:
+        # Buscamos coincidencias entre el inventario y los productos afectados del CVE
+        coincidencias = []
+        for producto in productos_afectados:
+            palabras_producto = set(producto.lower().split())
+            if palabras_producto.intersection(tecnologias_empresa):
+                coincidencias.append(producto)
+
+        if coincidencias:
+            st.error(
+                f"🏢 **Tu entorno podría estar afectado** — "
+                f"Se encontraron coincidencias con tu inventario: "
+                f"{', '.join(coincidencias[:5])}"
+            )
+        else:
+            st.success(
+                "🏢 **Sin coincidencias con tu inventario** — "
+                "No se detectaron tecnologías afectadas en tu entorno registrado."
+            )
+    elif not tecnologias_empresa:
+        st.info("🏢 **Inventario no configurado** — Define tu entorno en la página [Inventario](/Inventario) para saber si este CVE te afecta.")
 
     st.divider()
 
