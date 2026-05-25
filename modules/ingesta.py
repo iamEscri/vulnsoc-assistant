@@ -5,6 +5,14 @@ NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_URL = "https://api.first.org/data/v1/epss"
 
+# --- CAMBIO 1: Headers globales con User-Agent ---
+# Cloudflare (que protege NVD) puede bloquear peticiones de Python/requests
+# si no incluyen un User-Agent reconocible. Con esto lo evitamos.
+HEADERS = {
+    "User-Agent": "VulnSOC-Assistant/1.0",
+    "Accept": "application/json"
+}
+
 
 def _limpiar_html(texto: str) -> str:
     """Elimina etiquetas HTML de la descripcion del NVD."""
@@ -16,7 +24,10 @@ def obtener_datos_nvd(cve_id: str) -> dict:
     params = {"cveId": cve_id}
 
     try:
-        response = requests.get(NVD_BASE_URL, params=params, timeout=10)
+        # --- CAMBIO 2: timeout 10 → 30 segundos ---
+        # NVD puede tardar más de 10s en responder bajo carga.
+        # Con 30s damos margen suficiente sin colgar la app indefinidamente.
+        response = requests.get(NVD_BASE_URL, params=params, headers=HEADERS, timeout=30)
         response.raise_for_status()
         data = response.json()
 
@@ -122,6 +133,12 @@ def obtener_datos_nvd(cve_id: str) -> dict:
             "productos_afectados": productos_afectados[:20],
         }
 
+    except requests.exceptions.Timeout:
+        # --- CAMBIO 3: excepción Timeout separada ---
+        # Antes el timeout caía en el RequestException genérico y el mensaje
+        # era confuso. Ahora muestra un mensaje claro y accionable.
+        return {"error": "NVD tardó demasiado en responder. Inténtalo de nuevo en unos segundos."}
+
     except requests.exceptions.RequestException as e:
         return {"error": f"Error al conectar con NVD: {str(e)}"}
 
@@ -129,7 +146,8 @@ def obtener_datos_nvd(cve_id: str) -> dict:
 def comprobar_cisa_kev(cve_id: str) -> dict:
     """Comprueba si el CVE esta en el catalogo CISA KEV."""
     try:
-        response = requests.get(CISA_KEV_URL, timeout=15)
+        # --- CAMBIO 4: headers añadidos a CISA KEV ---
+        response = requests.get(CISA_KEV_URL, headers=HEADERS, timeout=15)
         response.raise_for_status()
         data = response.json()
 
@@ -152,7 +170,8 @@ def comprobar_cisa_kev(cve_id: str) -> dict:
 def obtener_epss(cve_id: str) -> dict:
     """Consulta la API de EPSS para obtener la probabilidad de explotacion."""
     try:
-        response = requests.get(EPSS_URL, params={"cve": cve_id}, timeout=10)
+        # --- CAMBIO 5: timeout 10 → 20 segundos + headers ---
+        response = requests.get(EPSS_URL, params={"cve": cve_id}, headers=HEADERS, timeout=20)
         response.raise_for_status()
         data = response.json()
 
@@ -199,7 +218,8 @@ def buscar_cves_por_descripcion(termino: str, max_resultados: int = 10) -> dict:
             "startIndex": 0
         }
 
-        response = requests.get(NVD_BASE_URL, params=params, timeout=15)
+        # --- CAMBIO 6: timeout 15 → 30 segundos + headers ---
+        response = requests.get(NVD_BASE_URL, params=params, headers=HEADERS, timeout=30)
         response.raise_for_status()
         data = response.json()
 
@@ -238,6 +258,9 @@ def buscar_cves_por_descripcion(termino: str, max_resultados: int = 10) -> dict:
             "total": total,
             "cves": cves
         }
+
+    except requests.exceptions.Timeout:
+        return {"error": "NVD tardó demasiado en responder. Inténtalo de nuevo.", "cves": []}
 
     except requests.exceptions.RequestException as e:
         return {"error": f"Error al buscar en NVD: {str(e)}", "cves": []}
