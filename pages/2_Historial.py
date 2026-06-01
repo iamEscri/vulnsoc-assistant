@@ -1,3 +1,6 @@
+import json
+from datetime import datetime
+
 import streamlit as st
 
 st.set_page_config(
@@ -7,16 +10,84 @@ st.set_page_config(
 )
 
 st.title("🗂️ Historial de sesión")
-st.caption("CVEs analizados durante esta sesión. El historial se reinicia al cerrar el navegador.")
+st.caption("CVEs analizados durante esta sesión. El historial se reinicia al cerrar el navegador, pero puedes exportarlo a un archivo y volver a importarlo más adelante.")
 st.divider()
 
-# ── COMPROBAR SI HAY HISTORIAL ─────────────────────────────────────────────
-# session_state es compartido entre páginas dentro de la misma sesión de
-# Streamlit, por eso podemos leer "historial" que app.py ha ido rellenando.
-historial = st.session_state.get("historial", [])
+# ── INICIALIZAR HISTORIAL ──────────────────────────────────────────────────
+# Si el usuario abre esta página antes de pasar por app.py, la clave podría no
+# existir todavía. La creamos vacía para poder importar sobre ella sin errores.
+if "historial" not in st.session_state:
+    st.session_state.historial = []
 
+historial = st.session_state.historial
+
+# ── EXPORTAR / IMPORTAR ────────────────────────────────────────────────────
+# Esta sección va ANTES del aviso de "historial vacío" a propósito: el caso
+# principal de importar es precisamente una sesión nueva (vacía) en la que
+# quieres recuperar el historial de otro día.
+with st.expander("💾 Exportar / Importar historial", expanded=not historial):
+
+    # --- EXPORTAR ---
+    # Cada entrada del historial ya es serializable a JSON (textos, números y
+    # diccionarios de las APIs), así que basta con volcarla con json.dumps.
+    # - ensure_ascii=False: conserva tildes y la "Í" de CRÍTICA legibles.
+    # - default=str: red de seguridad; si algún valor no fuese serializable
+    #   (p. ej. una fecha), se convierte a texto en vez de romper la descarga.
+    if historial:
+        json_historial = json.dumps(
+            historial, ensure_ascii=False, indent=2, default=str
+        )
+        st.download_button(
+            label="⬇️ Exportar historial (JSON)",
+            data=json_historial,
+            file_name=f"historial_vulnsoc_{datetime.now():%Y%m%d}.json",
+            mime="application/json",
+            help="Descarga todos los CVEs de esta sesión en un archivo.",
+        )
+    else:
+        st.write("ℹ️ No hay nada que exportar todavía.")
+
+    st.divider()
+
+    # --- IMPORTAR ---
+    archivo = st.file_uploader(
+        "Importar un historial guardado (.json)",
+        type=["json"],
+        help="Sube un archivo exportado anteriormente para recuperar esos CVEs.",
+    )
+
+    if archivo is not None and st.button("📥 Importar", type="primary"):
+        try:
+            datos = json.loads(archivo.read())
+
+            # Validación mínima: debe ser una lista de entradas (diccionarios).
+            if not isinstance(datos, list):
+                st.error("❌ El archivo no tiene el formato esperado (se esperaba una lista de CVEs).")
+            else:
+                # Fusión con deduplicado por cve_id. En caso de empate
+                # (mismo CVE en la sesión y en el archivo) conservamos el de
+                # la sesión actual, que es el más reciente: solo añadimos los
+                # CVEs del archivo que aún no estén en el historial.
+                ids_actuales = {e["cve_id"] for e in historial}
+                nuevos = [
+                    e for e in datos
+                    if isinstance(e, dict) and e.get("cve_id") and e["cve_id"] not in ids_actuales
+                ]
+                st.session_state.historial.extend(nuevos)
+
+                if nuevos:
+                    st.success(f"✅ Importados {len(nuevos)} CVE(s). Ya estaban en la sesión: {len(datos) - len(nuevos)}.")
+                else:
+                    st.info("Todos los CVEs del archivo ya estaban en el historial actual.")
+
+                st.rerun()
+
+        except json.JSONDecodeError:
+            st.error("❌ El archivo no es un JSON válido.")
+
+# Si tras esto el historial sigue vacío, no hay tabla que mostrar.
 if not historial:
-    st.info("⏳ Todavía no has analizado ningún CVE en esta sesión. Ve a la página principal e introduce un CVE.")
+    st.info("⏳ Todavía no has analizado ningún CVE en esta sesión. Ve a la página principal e introduce un CVE, o importa un historial guardado arriba.")
     st.stop()
 
 # ── RESUMEN NUMÉRICO ───────────────────────────────────────────────────────
