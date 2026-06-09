@@ -1,7 +1,7 @@
 import time
 import streamlit as st
 from modules.ingesta import analizar_cve
-from modules.scoring import calcular_score
+from modules.scoring import calcular_score, ajustar_por_inventario
 from modules.analisis_ia import generar_analisis
 
 st.title("📋 Análisis múltiple de CVEs")
@@ -72,6 +72,11 @@ if analizar and texto_cves.strip():
 
         # 2. Scoring
         score = calcular_score(resultado["nvd"], resultado["kev"], resultado["epss"])
+        score = ajustar_por_inventario(
+            score,
+            st.session_state.get("inventario", {}),
+            resultado["nvd"].get("productos_afectados", [])
+        )
 
         # 3. Análisis IA
         analisis = generar_analisis(resultado["nvd"], resultado["kev"], score)

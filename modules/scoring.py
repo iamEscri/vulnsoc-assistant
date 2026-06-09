@@ -190,11 +190,11 @@ def calcular_score(datos_nvd: dict, datos_kev: dict, datos_epss: dict = None) ->
     score_interno = round(puntuacion)
     score_mostrado = min(score_interno, 100)
 
-    if score_mostrado >= 80:
+    if score_interno >= 130:
         prioridad = "CRÍTICA"
-    elif score_mostrado >= 60:
+    elif score_interno >= 90:
         prioridad = "ALTA"
-    elif score_mostrado >= 40:
+    elif score_interno >= 55:
         prioridad = "MEDIA"
     else:
         prioridad = "BAJA"
@@ -207,4 +207,71 @@ def calcular_score(datos_nvd: dict, datos_kev: dict, datos_epss: dict = None) ->
         "tipo_vulnerabilidad": tipo_vuln,
         "epss_score": epss_score,
         "factores": factores
+    }
+
+
+def ajustar_por_inventario(score: dict, inventario: dict, productos_afectados: list) -> dict:
+    """
+    Ajusta el score segun si el CVE afecta al inventario de la empresa.
+
+    - Inventario no configurado : sin cambio
+    - CVE afecta al inventario  : +10 pts
+    - CVE no afecta al inventario: -25 pts
+
+    Recalcula score_interno, score_mostrado y prioridad con los umbrales
+    basados en score_interno (130 / 90 / 55).
+    """
+    tecnologias_empresa = set()
+    for item in inventario.get("sistemas_operativos", []):
+        tecnologias_empresa.update(item.lower().split())
+    for item in inventario.get("software", []):
+        tecnologias_empresa.update(item.lower().split())
+    for linea in inventario.get("personalizado", "").splitlines():
+        if linea.strip():
+            tecnologias_empresa.update(linea.strip().lower().split())
+
+    if not tecnologias_empresa:
+        return score
+
+    coincidencias = []
+    for producto in productos_afectados:
+        palabras = set(producto.lower().split())
+        if palabras.intersection(tecnologias_empresa):
+            coincidencias.append(producto)
+
+    factores = list(score["factores"])
+
+    if coincidencias:
+        ajuste = 10
+        factores.append({
+            "factor": "Confirmado en inventario",
+            "puntos": ajuste,
+            "detalle": f"Coincide con tu entorno: {', '.join(coincidencias[:3])}"
+        })
+    else:
+        ajuste = -25
+        factores.append({
+            "factor": "No detectado en inventario",
+            "puntos": ajuste,
+            "detalle": "El CVE no coincide con las tecnologías registradas en tu entorno"
+        })
+
+    nuevo_interno = max(score["score_interno"] + ajuste, 0)
+    nuevo_mostrado = min(nuevo_interno, 100)
+
+    if nuevo_interno >= 130:
+        prioridad = "CRÍTICA"
+    elif nuevo_interno >= 90:
+        prioridad = "ALTA"
+    elif nuevo_interno >= 55:
+        prioridad = "MEDIA"
+    else:
+        prioridad = "BAJA"
+
+    return {
+        **score,
+        "score_interno": nuevo_interno,
+        "score_mostrado": nuevo_mostrado,
+        "prioridad": prioridad,
+        "factores": factores,
     }

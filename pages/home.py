@@ -1,6 +1,6 @@
 import streamlit as st
 from modules.ingesta import analizar_cve
-from modules.scoring import calcular_score
+from modules.scoring import calcular_score, ajustar_por_inventario
 from modules.analisis_ia import generar_analisis, generar_regla_sigma
 from modules.exportar_pdf import generar_pdf
 
@@ -57,6 +57,9 @@ if analizar and cve_id:
 
     with st.spinner("Calculando scoring..."):
         score = calcular_score(resultado["nvd"], resultado["kev"], resultado["epss"])
+        inventario = st.session_state.get("inventario", {})
+        productos_afectados = resultado["nvd"].get("productos_afectados", [])
+        score = ajustar_por_inventario(score, inventario, productos_afectados)
 
     with st.spinner("Generando análisis con IA..."):
         analisis = generar_analisis(resultado["nvd"], resultado["kev"], score)

@@ -109,21 +109,23 @@ El CVSS mide la gravedad teórica — el sistema propio mide la urgencia real.
 """)
 
 factores = [
-    ("CVSS base",               "0 – 100",  "Punto de partida. CVSS × 10 para escalar a 0-100."),
-    ("En CISA KEV",             "+30",      "Explotación activa confirmada en el mundo real."),
-    ("Vulnerabilidad reciente", "+20",      "Publicada hace menos de 30 días. Ventana de parche abierta."),
-    ("EPSS > 0.7",              "+25",      "Alta probabilidad de explotación en los próximos 30 días."),
-    ("EPSS > 0.3",              "+10",      "Probabilidad moderada de explotación."),
-    ("Tipo RCE",                "+25",      "Ejecución remota de código — control total del sistema."),
-    ("Tipo PrivEsc",            "+18",      "Escalada de privilegios."),
-    ("Tipo SQLi",               "+15",      "Inyección SQL."),
-    ("Tipo PathTrav",           "+12",      "Path traversal — acceso a ficheros fuera del directorio raíz."),
-    ("Tipo XSS",                "+10",      "Cross-site scripting."),
-    ("Tipo DoS",                "+8",       "Denegación de servicio."),
-    ("Vector NETWORK",          "+15",      "Explotable remotamente sin acceso físico."),
-    ("Sin autenticación",       "+10",      "No requiere credenciales para explotar."),
-    ("Sin interacción usuario", "+10",      "No requiere que la víctima haga ninguna acción."),
-    ("Baja complejidad",        "+10",      "No requiere condiciones especiales para explotar."),
+    ("CVSS base",                    "0 – 100", "Punto de partida. CVSS × 10 para escalar a 0-100."),
+    ("En CISA KEV",                  "+30",     "Explotación activa confirmada en el mundo real."),
+    ("Vulnerabilidad reciente",      "+20",     "Publicada hace menos de 30 días. Ventana de parche abierta."),
+    ("EPSS > 0.7",                   "+25",     "Alta probabilidad de explotación en los próximos 30 días."),
+    ("EPSS > 0.3",                   "+10",     "Probabilidad moderada de explotación."),
+    ("Tipo RCE",                     "+25",     "Ejecución remota de código — control total del sistema."),
+    ("Tipo PrivEsc",                 "+18",     "Escalada de privilegios."),
+    ("Tipo SQLi",                    "+15",     "Inyección SQL."),
+    ("Tipo PathTrav",                "+12",     "Path traversal — acceso a ficheros fuera del directorio raíz."),
+    ("Tipo XSS",                     "+10",     "Cross-site scripting."),
+    ("Tipo DoS",                     "+8",      "Denegación de servicio."),
+    ("Vector NETWORK",               "+15",     "Explotable remotamente sin acceso físico."),
+    ("Sin autenticación",            "+10",     "No requiere credenciales para explotar."),
+    ("Sin interacción usuario",      "+10",     "No requiere que la víctima haga ninguna acción."),
+    ("Baja complejidad",             "+10",     "No requiere condiciones especiales para explotar."),
+    ("Confirmado en inventario",     "+10",     "El CVE afecta a tecnologías registradas en tu entorno."),
+    ("No detectado en inventario",   "−25",     "El CVE no coincide con ninguna tecnología de tu entorno registrado."),
 ]
 
 col_h1, col_h2, col_h3 = st.columns([3, 1, 4])
@@ -180,13 +182,13 @@ st.header("Niveles de prioridad")
 
 p1, p2, p3, p4 = st.columns(4)
 with p1:
-    st.error("🔴 CRÍTICA\nScore ≥ 80\nAcción inmediata")
+    st.error("🔴 CRÍTICA\nScore interno ≥ 130\nAcción inmediata")
 with p2:
-    st.warning("🟠 ALTA\nScore 60–79\nParchear en 24-48h")
+    st.warning("🟠 ALTA\nScore interno 90–129\nParchear en 24-48h")
 with p3:
-    st.info("🟡 MEDIA\nScore 40–59\nSiguiente ciclo")
+    st.info("🟡 MEDIA\nScore interno 55–89\nSiguiente ciclo")
 with p4:
-    st.success("🟢 BAJA\nScore < 40\nMonitorizar")
+    st.success("🟢 BAJA\nScore interno < 55\nMonitorizar")
 
 st.divider()
 
