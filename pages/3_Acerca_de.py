@@ -1,11 +1,5 @@
 import streamlit as st
 
-st.set_page_config(
-    page_title="VulnSOC Assistant — Acerca de",
-    page_icon="ℹ️",
-    layout="wide"
-)
-
 st.title("ℹ️ Acerca de VulnSOC Assistant")
 st.caption("Sistema inteligente de análisis y priorización de vulnerabilidades para SOC")
 st.divider()

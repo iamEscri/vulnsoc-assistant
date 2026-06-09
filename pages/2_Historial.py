@@ -3,12 +3,6 @@ from datetime import datetime
 
 import streamlit as st
 
-st.set_page_config(
-    page_title="Historial — VulnSOC Assistant",
-    page_icon="🗂️",
-    layout="wide"
-)
-
 st.title("🗂️ Historial de sesión")
 st.caption("CVEs analizados durante esta sesión. El historial se reinicia al cerrar el navegador, pero puedes exportarlo a un archivo y volver a importarlo más adelante.")
 st.divider()
@@ -145,7 +139,7 @@ for entrada in historial:
             st.session_state.score         = entrada["score"]
             st.session_state.analisis      = entrada["analisis"]
             st.session_state.cve_analizado = cve_id
-            st.switch_page("app.py")
+            st.switch_page("pages/home.py")
 
     st.divider()
 

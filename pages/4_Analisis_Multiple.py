@@ -4,12 +4,6 @@ from modules.ingesta import analizar_cve
 from modules.scoring import calcular_score
 from modules.analisis_ia import generar_analisis
 
-st.set_page_config(
-    page_title="Análisis múltiple — VulnSOC Assistant",
-    page_icon="📋",
-    layout="wide"
-)
-
 st.title("📋 Análisis múltiple de CVEs")
 st.caption("Introduce varios CVEs para analizarlos y compararlos ordenados por prioridad.")
 st.divider()
@@ -188,7 +182,7 @@ if resultados_multiple:
                 st.session_state.score         = entrada["score"]
                 st.session_state.analisis      = entrada["analisis"]
                 st.session_state.cve_analizado = cve_id
-                st.switch_page("app.py")
+                st.switch_page("pages/home.py")
 
         st.divider()
 

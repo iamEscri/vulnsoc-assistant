@@ -1,11 +1,5 @@
 import streamlit as st
 
-st.set_page_config(
-    page_title="Inventario — VulnSOC Assistant",
-    page_icon="🏢",
-    layout="wide"
-)
-
 st.title("🏢 Inventario de activos")
 st.caption("Define el perfil tecnológico de tu empresa. Se usará para determinar si los CVEs analizados te afectan.")
 st.divider()

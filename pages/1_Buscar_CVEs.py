@@ -1,12 +1,6 @@
 import streamlit as st
 from modules.ingesta import buscar_cves_por_descripcion
 
-st.set_page_config(
-    page_title="VulnSOC Assistant — Buscar CVEs",
-    page_icon="🔍",
-    layout="wide"
-)
-
 # Inicializar session state
 if "resultado" not in st.session_state:
     st.session_state.resultado = None
