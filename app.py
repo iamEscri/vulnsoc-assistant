@@ -12,6 +12,69 @@ st.markdown("""
 /* Ocultar footer de Streamlit */
 footer { visibility: hidden; }
 
+/* ── CONTENIDO PRINCIPAL: más ancho ── */
+.main .block-container {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    max-width: 100% !important;
+}
+
+/* ── TABS: sin padding lateral extra ── */
+[data-testid="stTabContent"] {
+    padding: 1.5rem 0 !important;
+}
+
+/* ── ENCABEZADOS DENTRO DEL CONTENIDO ── */
+[data-testid="stMarkdownContainer"] h1,
+[data-testid="stMarkdownContainer"] h2,
+[data-testid="stMarkdownContainer"] h3,
+[data-testid="stMarkdownContainer"] h4 {
+    color: #4da6ff !important;
+    margin-top: 1.4rem !important;
+    margin-bottom: 0.5rem !important;
+}
+
+[data-testid="stMarkdownContainer"] h1 {
+    font-size: 1.65rem !important;
+    font-weight: 700 !important;
+    border-bottom: 1px solid rgba(77,166,255,0.2) !important;
+    padding-bottom: 0.4rem !important;
+}
+
+[data-testid="stMarkdownContainer"] h2 {
+    font-size: 1.35rem !important;
+    font-weight: 700 !important;
+}
+
+[data-testid="stMarkdownContainer"] h3 {
+    font-size: 1.15rem !important;
+    font-weight: 600 !important;
+}
+
+[data-testid="stMarkdownContainer"] h4 {
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+}
+
+/* ── NEGRITA como título de sección en contenido IA ── */
+[data-testid="stMarkdownContainer"] p strong:only-child,
+[data-testid="stMarkdownContainer"] p > strong:first-child {
+    font-size: 1.05rem !important;
+    color: #4da6ff !important;
+}
+
+/* ── TEXTO CORRIDO: mejor interlineado sin cambiar color ── */
+[data-testid="stMarkdownContainer"] p {
+    line-height: 1.75 !important;
+}
+
+/* ── LISTAS dentro del contenido ── */
+[data-testid="stMarkdownContainer"] ul,
+[data-testid="stMarkdownContainer"] ol {
+    padding-left: 1.4rem !important;
+    line-height: 1.8 !important;
+}
+
 /* ── SIDEBAR CONTAINER ── */
 [data-testid="stSidebar"] {
     background-color: #0e1117 !important;
