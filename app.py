@@ -12,6 +12,47 @@ st.markdown("""
 /* Ocultar footer de Streamlit */
 footer { visibility: hidden; }
 
+/* ── BOTONES: estilo más sobrio ── */
+[data-testid="stButton"] button {
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    font-size: 0.82rem !important;
+    transition: opacity 0.12s ease !important;
+}
+[data-testid="stButton"] button:not([kind="primary"]):hover {
+    opacity: 0.85 !important;
+}
+
+/* ── MÉTRICAS nativas (scoring detallado): quitar borde inferior ── */
+[data-testid="stMetric"] {
+    background: #161b22 !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    border-radius: 7px !important;
+    padding: 0.75rem 1rem !important;
+}
+
+/* ── EXPANDERS: más discretos ── */
+[data-testid="stExpander"] summary {
+    font-weight: 600 !important;
+}
+
+/* ── INFO / WARNING / SUCCESS / ERROR: bordes redondeados ── */
+[data-testid="stAlert"] {
+    border-radius: 7px !important;
+}
+
+/* ── INPUTS: borde coherente ── */
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea {
+    border-radius: 6px !important;
+    border-color: rgba(255,255,255,0.12) !important;
+}
+
+/* ── MULTISELECT chips ── */
+[data-testid="stMultiSelect"] span[data-baseweb="tag"] {
+    border-radius: 4px !important;
+}
+
 /* ── CONTENIDO PRINCIPAL: más ancho ── */
 .main .block-container {
     padding-left: 1rem !important;

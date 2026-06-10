@@ -1,6 +1,7 @@
 import streamlit as st
 from modules.ingesta import analizar_cve
 from modules.scoring import calcular_score, ajustar_por_inventario
+from modules.ui import badge_prioridad, metricas_cve_html
 from modules.analisis_ia import generar_analisis, generar_regla_sigma
 from modules.exportar_pdf import generar_pdf
 
@@ -98,25 +99,15 @@ if st.session_state.resultado:
     kev = resultado["kev"].get("en_kev", False)
     epss = score.get("epss_score", 0)
     prioridad = score["prioridad"]
-    color = {"CRÍTICA": "🔴", "ALTA": "🟠", "MEDIA": "🟡", "BAJA": "🟢"}
 
-    st.subheader(f"📊 {cve_id}")
-    m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
-    with m1:
-        st.metric("Score sistema", f"{score['score_mostrado']}/100")
-    with m2:
-        st.metric("Score interno", score['score_interno'],
-                  help="Puntuación real sin límite. Útil para ordenar CVEs con score igual.")
-    with m3:
-        st.metric("CVSS puro", f"{score['score_cvss_puro']}/100")
-    with m4:
-        st.metric("Prioridad", f"{color.get(prioridad, '')} {prioridad}")
-    with m5:
-        st.metric("En CISA KEV", "✅ Sí" if kev else "❌ No")
-    with m6:
-        st.metric("EPSS", f"{epss:.1%}")
-    with m7:
-        st.metric("Tipo", score.get("tipo_vulnerabilidad", "Desconocido"))
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.25rem;">'
+        f'<span style="font-family:monospace;font-size:1.35rem;font-weight:700;color:#e6edf3;">{cve_id}</span>'
+        f'{badge_prioridad(prioridad)}'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+    st.markdown(metricas_cve_html(score, kev, epss), unsafe_allow_html=True)
 
     if kev:
         st.warning(

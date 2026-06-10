@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 
 import streamlit as st
+from modules.ui import badge_prioridad, badge_kev, chip, color_prioridad
 
 st.title("🗂️ Historial de sesión")
 st.caption("CVEs analizados durante esta sesión. El historial se reinicia al cerrar el navegador, pero puedes exportarlo a un archivo y volver a importarlo más adelante.")
@@ -100,48 +101,46 @@ with c3:
 st.divider()
 
 # ── TABLA DE CVEs ──────────────────────────────────────────────────────────
-COLOR_PRIORIDAD = {
-    "CRÍTICA": "🔴",
-    "ALTA":    "🟠",
-    "MEDIA":   "🟡",
-    "BAJA":    "🟢",
-}
-
 st.subheader("CVEs de esta sesión")
+st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
 
 for entrada in historial:
     cve_id    = entrada["cve_id"]
     prioridad = entrada["prioridad"]
-    icono     = COLOR_PRIORIDAD.get(prioridad, "⚪")
-    kev_badge = "⚠️ KEV" if entrada["en_kev"] else ""
+    c         = color_prioridad(prioridad)
+    kev_html  = badge_kev() if entrada["en_kev"] else ""
     epss_pct  = f"{entrada['epss_score']:.1%}"
 
-    col_cve, col_score, col_prio, col_tipo, col_epss, col_kev, col_btn = st.columns(
-        [2, 1.2, 1.5, 1.5, 1, 1, 1.5]
-    )
+    col_info, col_btn = st.columns([6, 1])
 
-    with col_cve:
-        st.write(f"**{cve_id}**")
-    with col_score:
-        st.write(f"{entrada['score_mostrado']}/100")
-    with col_prio:
-        st.write(f"{icono} {prioridad}")
-    with col_tipo:
-        st.write(entrada["tipo"])
-    with col_epss:
-        st.write(epss_pct)
-    with col_kev:
-        st.write(kev_badge)
+    with col_info:
+        st.markdown(f"""
+        <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);
+                    border-left:3px solid {c};border-radius:7px;
+                    padding:0.75rem 1.1rem;display:flex;align-items:center;
+                    gap:1.2rem;flex-wrap:wrap;">
+            <span style="font-family:monospace;font-weight:700;color:#e6edf3;
+                         font-size:0.95rem;min-width:9rem;">{cve_id}</span>
+            {badge_prioridad(prioridad)}
+            <span style="color:rgba(255,255,255,0.7);font-size:0.875rem;font-weight:600;">
+                {entrada['score_mostrado']}/100
+            </span>
+            {chip(entrada['tipo'])}
+            <span style="color:rgba(255,255,255,0.4);font-size:0.8rem;">EPSS {epss_pct}</span>
+            {kev_html}
+        </div>
+        """, unsafe_allow_html=True)
+
     with col_btn:
-        # Al pulsar, cargamos ese análisis en session_state y navegamos a app.py
-        if st.button("📂 Cargar", key=f"cargar_{cve_id}"):
+        st.markdown("<div style='height:0.35rem'></div>", unsafe_allow_html=True)
+        if st.button("Cargar", key=f"cargar_{cve_id}", use_container_width=True):
             st.session_state.resultado     = entrada["resultado"]
             st.session_state.score         = entrada["score"]
             st.session_state.analisis      = entrada["analisis"]
             st.session_state.cve_analizado = cve_id
             st.switch_page("pages/home.py")
 
-    st.divider()
+    st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
 
 # ── BOTÓN LIMPIAR HISTORIAL ────────────────────────────────────────────────
 st.write("")

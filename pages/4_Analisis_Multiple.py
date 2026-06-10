@@ -1,7 +1,10 @@
 import time
+import pandas as pd
+import altair as alt
 import streamlit as st
 from modules.ingesta import analizar_cve
 from modules.scoring import calcular_score, ajustar_por_inventario
+from modules.ui import badge_prioridad, badge_kev, chip, color_prioridad, COLORES_PRIORIDAD
 from modules.analisis_ia import generar_analisis
 
 st.title("📋 Análisis múltiple de CVEs")
@@ -110,20 +113,12 @@ if analizar and texto_cves.strip():
     st.session_state.errores_multiple = errores
 
 # ── MOSTRAR RESULTADOS ─────────────────────────────────────────────────────
-COLOR_PRIORIDAD = {
-    "CRÍTICA": "🔴",
-    "ALTA":    "🟠",
-    "MEDIA":   "🟡",
-    "BAJA":    "🟢",
-}
-
 resultados_multiple = st.session_state.get("resultados_multiple", [])
 errores = st.session_state.get("errores_multiple", [])
 
 if resultados_multiple:
     st.divider()
 
-    # Ordenar por score_interno descendente (más urgente primero)
     resultados_ordenados = sorted(resultados_multiple, key=lambda x: x["score_interno"], reverse=True)
 
     # ── MÉTRICAS RESUMEN ───────────────────────────────────────────────────
@@ -131,65 +126,92 @@ if resultados_multiple:
     criticos = sum(1 for e in resultados_ordenados if e["prioridad"] == "CRÍTICA")
     en_kev   = sum(1 for e in resultados_ordenados if e["en_kev"])
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("CVEs analizados", total)
-    with c2:
-        st.metric("Prioridad CRÍTICA", criticos)
-    with c3:
-        st.metric("En CISA KEV", en_kev)
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.65rem;margin-bottom:1.5rem;">
+        <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-top:3px solid #4da6ff;border-radius:7px;padding:0.85rem 1rem;">
+            <div style="color:rgba(255,255,255,0.4);font-size:0.67rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">CVEs analizados</div>
+            <div style="color:#e6edf3;font-size:1.5rem;font-weight:700;">{total}</div>
+        </div>
+        <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-top:3px solid #ff4444;border-radius:7px;padding:0.85rem 1rem;">
+            <div style="color:rgba(255,255,255,0.4);font-size:0.67rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">Prioridad CRÍTICA</div>
+            <div style="color:#ff4444;font-size:1.5rem;font-weight:700;">{criticos}</div>
+        </div>
+        <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-top:3px solid #ff8c00;border-radius:7px;padding:0.85rem 1rem;">
+            <div style="color:rgba(255,255,255,0.4);font-size:0.67rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">En CISA KEV</div>
+            <div style="color:#ff8c00;font-size:1.5rem;font-weight:700;">{en_kev}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.divider()
+    # ── GRÁFICO DE BARRAS ──────────────────────────────────────────────────
+    st.subheader("Comparativa visual")
+    df_chart = pd.DataFrame([{
+        "CVE":       e["cve_id"],
+        "Score":     e["score_interno"],
+        "Prioridad": e["prioridad"],
+    } for e in resultados_ordenados])
 
-    # ── TABLA COMPARATIVA ──────────────────────────────────────────────────
-    st.subheader("Resultados ordenados por prioridad")
+    chart = (
+        alt.Chart(df_chart)
+        .mark_bar(cornerRadius=3)
+        .encode(
+            x=alt.X("Score:Q", title="Score interno", axis=alt.Axis(grid=False, labelColor="#8b949e", titleColor="#8b949e")),
+            y=alt.Y("CVE:N", sort="-x", title=None, axis=alt.Axis(labelColor="#c9d1d9")),
+            color=alt.Color(
+                "Prioridad:N",
+                scale=alt.Scale(
+                    domain=["CRÍTICA", "ALTA", "MEDIA", "BAJA"],
+                    range=["#ff4444", "#ff8c00", "#f0c040", "#3dd68c"],
+                ),
+                legend=None,
+            ),
+            tooltip=["CVE:N", "Score:Q", "Prioridad:N"],
+        )
+        .configure_view(strokeOpacity=0)
+        .configure_axis(domainColor="#30363d")
+        .properties(height=max(160, len(resultados_ordenados) * 38))
+    )
+    st.altair_chart(chart, use_container_width=True)
 
-    # Cabecera de la tabla
-    h1, h2, h3, h4, h5, h6, h7, h8 = st.columns([2, 1.2, 1.2, 1.5, 1.5, 1, 1, 1.5])
-    with h1: st.markdown("**CVE**")
-    with h2: st.markdown("**Score**")
-    with h3: st.markdown("**Interno**")
-    with h4: st.markdown("**Prioridad**")
-    with h5: st.markdown("**Tipo**")
-    with h6: st.markdown("**EPSS**")
-    with h7: st.markdown("**KEV**")
-    with h8: st.markdown("**Acción**")
-    st.divider()
+    # ── LISTA DE RESULTADOS ────────────────────────────────────────────────
+    st.subheader("Detalle por CVE")
+    st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
 
     for entrada in resultados_ordenados:
         cve_id    = entrada["cve_id"]
         prioridad = entrada["prioridad"]
-        icono     = COLOR_PRIORIDAD.get(prioridad, "⚪")
-        kev_badge = "⚠️ KEV" if entrada["en_kev"] else ""
+        c         = color_prioridad(prioridad)
+        kev_html  = badge_kev() if entrada["en_kev"] else ""
         epss_pct  = f"{entrada['epss_score']:.1%}"
 
-        col_cve, col_score, col_interno, col_prio, col_tipo, col_epss, col_kev, col_btn = st.columns(
-            [2, 1.2, 1.2, 1.5, 1.5, 1, 1, 1.5]
-        )
-        with col_cve:
-            st.write(f"**{cve_id}**")
-        with col_score:
-            st.write(f"{entrada['score_mostrado']}/100")
-        with col_interno:
-            st.write(f"{entrada['score_interno']}")
-        with col_prio:
-            st.write(f"{icono} {prioridad}")
-        with col_tipo:
-            st.write(entrada["tipo"])
-        with col_epss:
-            st.write(epss_pct)
-        with col_kev:
-            st.write(kev_badge)
+        col_info, col_btn = st.columns([6, 1])
+
+        with col_info:
+            st.markdown(f"""
+            <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);
+                        border-left:3px solid {c};border-radius:7px;
+                        padding:0.75rem 1.1rem;display:flex;align-items:center;
+                        gap:1.2rem;flex-wrap:wrap;">
+                <span style="font-family:monospace;font-weight:700;color:#e6edf3;font-size:0.95rem;min-width:9rem;">{cve_id}</span>
+                {badge_prioridad(prioridad)}
+                <span style="color:rgba(255,255,255,0.7);font-size:0.875rem;font-weight:600;">{entrada['score_mostrado']}/100</span>
+                <span style="color:rgba(255,255,255,0.4);font-size:0.8rem;">interno: {entrada['score_interno']}</span>
+                {chip(entrada['tipo'])}
+                <span style="color:rgba(255,255,255,0.4);font-size:0.8rem;">EPSS {epss_pct}</span>
+                {kev_html}
+            </div>
+            """, unsafe_allow_html=True)
+
         with col_btn:
-            # Carga el análisis completo de ese CVE en la página principal
-            if st.button("📂 Ver detalle", key=f"multi_{cve_id}"):
+            st.markdown("<div style='height:0.35rem'></div>", unsafe_allow_html=True)
+            if st.button("Ver", key=f"multi_{cve_id}", use_container_width=True):
                 st.session_state.resultado     = entrada["resultado"]
                 st.session_state.score         = entrada["score"]
                 st.session_state.analisis      = entrada["analisis"]
                 st.session_state.cve_analizado = cve_id
                 st.switch_page("pages/home.py")
 
-        st.divider()
+        st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
 
 # ── ERRORES ────────────────────────────────────────────────────────────────
 if errores:
