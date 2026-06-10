@@ -17,7 +17,7 @@ st.title("🔍 Buscar CVEs")
 st.caption("Busca por nombre de software, tipo de vulnerabilidad, descripción técnica o cualquier término relacionado.")
 st.divider()
 
-col1, col2 = st.columns([3, 1])
+col1, col2, col3 = st.columns([3, 1, 1])
 with col1:
     termino = st.text_input(
         "Término de búsqueda",
@@ -25,13 +25,16 @@ with col1:
         help="Ejemplos: 'apache struts rce', 'windows kernel privilege escalation', 'sql injection wordpress', 'openssl heartbleed'"
     )
 with col2:
+    max_res = st.selectbox("Resultados", [10, 20, 50], index=1,
+                           help="Número máximo de CVEs a mostrar")
+with col3:
     st.write("")
     st.write("")
     buscar = st.button("🔍 Buscar", type="primary", use_container_width=True)
 
 if buscar and termino:
     with st.spinner(f"Buscando CVEs relacionados con '{termino}'..."):
-        st.session_state.resultados_busqueda = buscar_cves_por_descripcion(termino)
+        st.session_state.resultados_busqueda = buscar_cves_por_descripcion(termino, max_res)
 
 # ── RESULTADOS ─────────────────────────────────────────────────────────────
 if st.session_state.resultados_busqueda:
@@ -51,7 +54,10 @@ if st.session_state.resultados_busqueda:
         )
 
         for cve in resultados["cves"]:
-            cvss = cve.get("cvss_score") or 0
+            try:
+                cvss = float(cve.get("cvss_score") or 0)
+            except (TypeError, ValueError):
+                cvss = 0.0
             fecha = (cve.get("fecha_publicacion") or "")[:10]
             descripcion = cve.get("descripcion", "")
             desc_corta = descripcion[:300] + ("…" if len(descripcion) > 300 else "")

@@ -10,7 +10,11 @@ def color_prioridad(prioridad: str) -> str:
     return COLORES_PRIORIDAD.get(prioridad, "#888888")
 
 
-def color_cvss(score: float) -> str:
+def color_cvss(score) -> str:
+    try:
+        score = float(score)
+    except (TypeError, ValueError):
+        return "#888888"
     if score >= 9.0:
         return "#ff4444"
     elif score >= 7.0:

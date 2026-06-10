@@ -206,7 +206,7 @@ def analizar_cve(cve_id: str) -> dict:
     }
 
 
-def buscar_cves_por_descripcion(termino: str, max_resultados: int = 10) -> dict:
+def buscar_cves_por_descripcion(termino: str, max_resultados: int = 20) -> dict:
     """
     Busca CVEs en el NVD por descripcion o termino tecnico.
     Devuelve los CVEs mas relevantes con su informacion basica.
