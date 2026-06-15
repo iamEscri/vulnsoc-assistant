@@ -214,9 +214,11 @@ def ajustar_por_inventario(score: dict, inventario: dict, productos_afectados: l
     """
     Ajusta el score segun si el CVE afecta al inventario de la empresa.
 
-    - Inventario no configurado : sin cambio
-    - CVE afecta al inventario  : +10 pts
-    - CVE no afecta al inventario: -25 pts
+    Tri-estado (no confundir "ausencia de dato" con "ausencia confirmada"):
+    - Inventario no configurado      : sin cambio
+    - Sin productos afectados (no CPE): sin cambio (no verificable)
+    - CVE afecta al inventario        : +10 pts
+    - CVE no afecta al inventario     : -25 pts
 
     Recalcula score_interno, score_mostrado y prioridad con los umbrales
     basados en score_interno (130 / 90 / 55).
@@ -232,6 +234,17 @@ def ajustar_por_inventario(score: dict, inventario: dict, productos_afectados: l
 
     if not tecnologias_empresa:
         return score
+
+    # Sin productos afectados (la NVD aun no ha enriquecido el CVE con CPEs):
+    # no podemos verificar el inventario. No penalizamos ausencia de dato.
+    if not productos_afectados:
+        factores = list(score["factores"])
+        factores.append({
+            "factor": "Inventario no verificable",
+            "puntos": 0,
+            "detalle": "Inventario no verificable — sin CPE publicado",
+        })
+        return {**score, "factores": factores}
 
     coincidencias = []
     for producto in productos_afectados:
