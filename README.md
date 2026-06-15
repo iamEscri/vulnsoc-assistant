@@ -71,6 +71,21 @@ El motor de scoring de VulnSOC Assistant parte del CVSS y lo **contextualiza con
 
 > 📊 Ejemplo real: **PrintNightmare (CVE-2021-34527)** tiene un CVSS de 8.8 (alta, no crítica). Al estar en CISA KEV, tener EPSS elevado y ser explotable en red, el scoring contextualizado la eleva a prioridad **crítica**, que es como la trató la industria en la práctica.
 
+### Ajuste por inventario (correlación con el entorno)
+
+La urgencia real de un CVE no depende solo de la vulnerabilidad, sino de **si afecta a tu entorno concreto**. Definiendo un inventario de activos (SO y software), el motor cruza los datos **CPE** del CVE con tus tecnologías y ajusta la prioridad.
+
+El reto de diseño es **no confundir "ausencia de dato" con "ausencia real"**: los CVEs más recientes —los más urgentes— suelen no tener CPE todavía, y muchos componentes (plugins, themes) corren *sobre* una plataforma sin llamarse como ella. Penalizar esos casos genera un falso negativo sistemático contra las vulnerabilidades más nuevas. Por eso la correlación es de **cuatro estados**, no binaria:
+
+| Estado | Condición | Ajuste |
+|---|---|---|
+| ✅ **Confirmado en inventario** | El producto del CPE coincide con tu entorno | **+10** |
+| ⚠️ **Componente del ecosistema** | El producto no coincide, pero la plataforma (`target_sw` del CPE, p.ej. *WordPress*) sí | **0** |
+| ⚠️ **No verificable** | El CVE aún no tiene CPE publicado en la NVD | **0** |
+| ❌ **No detectado** | El CPE existe y no coincide con ninguna tecnología de tu entorno | **−25** |
+
+> 🔑 **Decisión clave:** solo se penaliza (−25) la ausencia **confirmada**. Un plugin de WordPress sobre un entorno que tiene WordPress no se descarta: se marca para revisión manual. Así la priorización no entierra los CVEs más nuevos por falta de datos.
+
 ---
 
 ## 🏗️ Arquitectura
