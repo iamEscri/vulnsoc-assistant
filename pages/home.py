@@ -158,7 +158,15 @@ if st.session_state.resultado:
         if linea.strip():
             tecnologias_empresa.update(linea.strip().lower().split())
 
-    if tecnologias_empresa and productos_afectados:
+    if not tecnologias_empresa:
+        st.info("🏢 **Inventario no configurado** — Define tu entorno en la página [Inventario](/Inventario) para saber si este CVE te afecta.")
+    elif not productos_afectados:
+        st.warning(
+            "🏢 **Inventario no verificable** — Este CVE aún no tiene CPE publicado "
+            "en la NVD, así que todavía no se puede comparar con tu inventario. "
+            "Revísalo manualmente."
+        )
+    else:
         coincidencias = []
         for producto in productos_afectados:
             palabras_producto = set(producto.lower().split())
@@ -176,8 +184,6 @@ if st.session_state.resultado:
                 "🏢 **Sin coincidencias con tu inventario** — "
                 "No se detectaron tecnologías afectadas en tu entorno registrado."
             )
-    elif not tecnologias_empresa:
-        st.info("🏢 **Inventario no configurado** — Define tu entorno en la página [Inventario](/Inventario) para saber si este CVE te afecta.")
 
     st.divider()
 
