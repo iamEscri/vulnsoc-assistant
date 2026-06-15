@@ -210,19 +210,24 @@ def calcular_score(datos_nvd: dict, datos_kev: dict, datos_epss: dict = None) ->
     }
 
 
-def ajustar_por_inventario(score: dict, inventario: dict, productos_afectados: list) -> dict:
+def ajustar_por_inventario(score: dict, inventario: dict, productos_afectados: list,
+                           plataformas_afectadas: list = None) -> dict:
     """
     Ajusta el score segun si el CVE afecta al inventario de la empresa.
 
-    Tri-estado (no confundir "ausencia de dato" con "ausencia confirmada"):
-    - Inventario no configurado      : sin cambio
-    - Sin productos afectados (no CPE): sin cambio (no verificable)
-    - CVE afecta al inventario        : +10 pts
-    - CVE no afecta al inventario     : -25 pts
+    Estados (no confundir "ausencia de dato" con "ausencia confirmada"):
+    - Inventario no configurado          : sin cambio
+    - Sin productos afectados (no CPE)    : sin cambio (no verificable)
+    - Producto coincide con inventario    : +10 pts
+    - Plataforma (target_sw) coincide pero
+      el producto no (p.ej. plugin sobre
+      una plataforma que si tienes)       : sin cambio (componente no confirmado)
+    - Nada coincide                       : -25 pts
 
     Recalcula score_interno, score_mostrado y prioridad con los umbrales
     basados en score_interno (130 / 90 / 55).
     """
+    plataformas_afectadas = plataformas_afectadas or []
     tecnologias_empresa = set()
     for item in inventario.get("sistemas_operativos", []):
         tecnologias_empresa.update(item.lower().split())
@@ -252,6 +257,15 @@ def ajustar_por_inventario(score: dict, inventario: dict, productos_afectados: l
         if palabras.intersection(tecnologias_empresa):
             coincidencias.append(producto)
 
+    # Coincidencias a nivel de plataforma (target_sw): el componente concreto
+    # no esta en el inventario, pero la plataforma sobre la que corre si — caso
+    # tipico de un plugin/theme sobre WordPress, Drupal, etc.
+    coincidencias_plataforma = []
+    for plataforma in plataformas_afectadas:
+        palabras = set(plataforma.lower().split())
+        if palabras.intersection(tecnologias_empresa):
+            coincidencias_plataforma.append(plataforma)
+
     factores = list(score["factores"])
 
     if coincidencias:
@@ -260,6 +274,16 @@ def ajustar_por_inventario(score: dict, inventario: dict, productos_afectados: l
             "factor": "Confirmado en inventario",
             "puntos": ajuste,
             "detalle": f"Coincide con tu entorno: {', '.join(coincidencias[:3])}"
+        })
+    elif coincidencias_plataforma:
+        ajuste = 0
+        factores.append({
+            "factor": "Componente del ecosistema en tu inventario",
+            "puntos": ajuste,
+            "detalle": (
+                f"Corre sobre {', '.join(coincidencias_plataforma[:3])}, que si tienes. "
+                "No se puede confirmar el componente — revisalo manualmente"
+            )
         })
     else:
         ajuste = -25

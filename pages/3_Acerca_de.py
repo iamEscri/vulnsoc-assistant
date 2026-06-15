@@ -125,6 +125,8 @@ factores = [
     ("Sin interacción usuario",      "+10",     "No requiere que la víctima haga ninguna acción."),
     ("Baja complejidad",             "+10",     "No requiere condiciones especiales para explotar."),
     ("Confirmado en inventario",     "+10",     "El CVE afecta a tecnologías registradas en tu entorno."),
+    ("Componente del ecosistema",    "0",       "El producto no está en tu inventario, pero corre sobre una plataforma que sí tienes (p.ej. un plugin de WordPress). No se puede descartar."),
+    ("Inventario no verificable",    "0",       "El CVE aún no tiene CPE publicado en la NVD: no se penaliza por falta de datos."),
     ("No detectado en inventario",   "−25",     "El CVE no coincide con ninguna tecnología de tu entorno registrado."),
 ]
 

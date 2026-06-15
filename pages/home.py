@@ -60,7 +60,8 @@ if analizar and cve_id:
         score = calcular_score(resultado["nvd"], resultado["kev"], resultado["epss"])
         inventario = st.session_state.get("inventario", {})
         productos_afectados = resultado["nvd"].get("productos_afectados", [])
-        score = ajustar_por_inventario(score, inventario, productos_afectados)
+        plataformas_afectadas = resultado["nvd"].get("plataformas_afectadas", [])
+        score = ajustar_por_inventario(score, inventario, productos_afectados, plataformas_afectadas)
 
     with st.spinner("Generando análisis con IA..."):
         analisis = generar_analisis(resultado["nvd"], resultado["kev"], score)
@@ -148,6 +149,7 @@ if st.session_state.resultado:
     # ── INVENTARIO DE ACTIVOS — ¿te afecta este CVE? ─────────────────────────
     inventario = st.session_state.get("inventario", {})
     productos_afectados = resultado["nvd"].get("productos_afectados", [])
+    plataformas_afectadas = resultado["nvd"].get("plataformas_afectadas", [])
 
     tecnologias_empresa = set()
     for item in inventario.get("sistemas_operativos", []):
@@ -173,11 +175,22 @@ if st.session_state.resultado:
             if palabras_producto.intersection(tecnologias_empresa):
                 coincidencias.append(producto)
 
+        coincidencias_plataforma = []
+        for plataforma in plataformas_afectadas:
+            if set(plataforma.lower().split()).intersection(tecnologias_empresa):
+                coincidencias_plataforma.append(plataforma)
+
         if coincidencias:
             st.error(
                 f"🏢 **Tu entorno podría estar afectado** — "
                 f"Se encontraron coincidencias con tu inventario: "
                 f"{', '.join(coincidencias[:5])}"
+            )
+        elif coincidencias_plataforma:
+            st.warning(
+                f"🏢 **Componente del ecosistema {', '.join(coincidencias_plataforma[:3])}** — "
+                f"El producto concreto no está en tu inventario, pero corre sobre una "
+                f"plataforma que sí tienes. No se puede descartar — revísalo manualmente."
             )
         else:
             st.success(

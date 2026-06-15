@@ -78,7 +78,8 @@ if analizar and texto_cves.strip():
         score = ajustar_por_inventario(
             score,
             st.session_state.get("inventario", {}),
-            resultado["nvd"].get("productos_afectados", [])
+            resultado["nvd"].get("productos_afectados", []),
+            resultado["nvd"].get("plataformas_afectadas", [])
         )
 
         # 3. Análisis IA

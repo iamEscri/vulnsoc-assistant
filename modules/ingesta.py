@@ -87,8 +87,12 @@ def obtener_datos_nvd(cve_id: str) -> dict:
                 descripcion = _limpiar_html(desc["value"])
                 break
 
-        # Productos afectados — extraemos vendor y producto de los CPEs vulnerables
+        # Productos afectados — extraemos vendor y producto de los CPEs vulnerables.
+        # Tambien capturamos target_sw (campo 10 del CPE 2.3): la plataforma sobre
+        # la que corre el componente, p.ej. "wordpress" para un plugin. Sirve para
+        # no descartar plugins/themes cuando el inventario tiene la plataforma base.
         productos_afectados = []
+        plataformas_afectadas = []
         for config in cve.get("configurations", []):
             for node in config.get("nodes", []):
                 for match in node.get("cpeMatch", []):
@@ -101,6 +105,11 @@ def obtener_datos_nvd(cve_id: str) -> dict:
                             entrada = f"{vendor} {producto}".strip()
                             if entrada and entrada not in productos_afectados:
                                 productos_afectados.append(entrada)
+                        if len(partes) >= 11:
+                            target_sw = partes[10].replace("_", " ").strip()
+                            if target_sw and target_sw not in ("*", "-") \
+                                    and target_sw not in plataformas_afectadas:
+                                plataformas_afectadas.append(target_sw)
 
         # Referencias completas con sus etiquetas (patch, vendor advisory, etc.)
         referencias_completas = []
@@ -131,6 +140,7 @@ def obtener_datos_nvd(cve_id: str) -> dict:
             "parche_disponible": parche_disponible,
             "refs_parche": refs_parche[:3],
             "productos_afectados": productos_afectados[:20],
+            "plataformas_afectadas": plataformas_afectadas[:10],
         }
 
     except requests.exceptions.Timeout:
