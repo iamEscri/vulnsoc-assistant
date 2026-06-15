@@ -227,15 +227,10 @@ def ajustar_por_inventario(score: dict, inventario: dict, productos_afectados: l
     Recalcula score_interno, score_mostrado y prioridad con los umbrales
     basados en score_interno (130 / 90 / 55).
     """
+    from modules.inventario import tecnologias_inventario
+
     plataformas_afectadas = plataformas_afectadas or []
-    tecnologias_empresa = set()
-    for item in inventario.get("sistemas_operativos", []):
-        tecnologias_empresa.update(item.lower().split())
-    for item in inventario.get("software", []):
-        tecnologias_empresa.update(item.lower().split())
-    for linea in inventario.get("personalizado", "").splitlines():
-        if linea.strip():
-            tecnologias_empresa.update(linea.strip().lower().split())
+    tecnologias_empresa = tecnologias_inventario(inventario)
 
     if not tecnologias_empresa:
         return score

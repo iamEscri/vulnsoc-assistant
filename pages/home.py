@@ -146,22 +146,17 @@ if st.session_state.resultado:
         mime="application/pdf"
     )
 
-    # ── INVENTARIO DE ACTIVOS — ¿te afecta este CVE? ─────────────────────────
-    inventario = st.session_state.get("inventario", {})
+    # ── INVENTARIO DE ACTIVOS — ¿en qué equipos te afecta este CVE? ──────────
+    from modules.inventario import normalizar_inventario, equipos_afectados
+
+    inventario = normalizar_inventario(st.session_state.get("inventario", {}))
     productos_afectados = resultado["nvd"].get("productos_afectados", [])
     plataformas_afectadas = resultado["nvd"].get("plataformas_afectadas", [])
 
-    tecnologias_empresa = set()
-    for item in inventario.get("sistemas_operativos", []):
-        tecnologias_empresa.update(item.lower().split())
-    for item in inventario.get("software", []):
-        tecnologias_empresa.update(item.lower().split())
-    for linea in inventario.get("personalizado", "").splitlines():
-        if linea.strip():
-            tecnologias_empresa.update(linea.strip().lower().split())
+    EMOJI_CRIT = {"alta": "🔴", "media": "🟠", "baja": "🟢"}
 
-    if not tecnologias_empresa:
-        st.info("🏢 **Inventario no configurado** — Define tu entorno en la página [Inventario](/Inventario) para saber si este CVE te afecta.")
+    if not inventario.get("equipos"):
+        st.info("🏢 **Inventario no configurado** — Define tus equipos en la página [Inventario](/Inventario) para saber en qué equipos te afecta este CVE.")
     elif not productos_afectados:
         st.warning(
             "🏢 **Inventario no verificable** — Este CVE aún no tiene CPE publicado "
@@ -169,33 +164,41 @@ if st.session_state.resultado:
             "Revísalo manualmente."
         )
     else:
-        coincidencias = []
-        for producto in productos_afectados:
-            palabras_producto = set(producto.lower().split())
-            if palabras_producto.intersection(tecnologias_empresa):
-                coincidencias.append(producto)
+        afectados = equipos_afectados(inventario, productos_afectados, plataformas_afectadas)
+        # Equipos con coincidencia directa de producto (afectacion confirmada)
+        confirmados = [e for e in afectados if e["coincidencias"]]
+        # Equipos solo con coincidencia de plataforma (componente del ecosistema)
+        ecosistema = [e for e in afectados if not e["coincidencias"]]
 
-        coincidencias_plataforma = []
-        for plataforma in plataformas_afectadas:
-            if set(plataforma.lower().split()).intersection(tecnologias_empresa):
-                coincidencias_plataforma.append(plataforma)
-
-        if coincidencias:
+        if confirmados:
             st.error(
-                f"🏢 **Tu entorno podría estar afectado** — "
-                f"Se encontraron coincidencias con tu inventario: "
-                f"{', '.join(coincidencias[:5])}"
+                f"🏢 **Te afecta en {len(confirmados)} equipo(s)** — "
+                "revisa y prioriza el parcheo en:"
             )
-        elif coincidencias_plataforma:
+            for e in confirmados:
+                ip = f" · {e['ip']}" if e["ip"] else ""
+                st.markdown(
+                    f"- {EMOJI_CRIT.get(e['criticidad'], '⚪')} **{e['nombre']}**{ip} "
+                    f"(criticidad {e['criticidad']}) → {', '.join(e['coincidencias'])}"
+                )
+
+        if ecosistema:
             st.warning(
-                f"🏢 **Componente del ecosistema {', '.join(coincidencias_plataforma[:3])}** — "
-                f"El producto concreto no está en tu inventario, pero corre sobre una "
-                f"plataforma que sí tienes. No se puede descartar — revísalo manualmente."
+                f"🏢 **Componente del ecosistema en {len(ecosistema)} equipo(s)** — "
+                "el producto concreto no está en tu inventario, pero corre sobre una "
+                "plataforma que sí tienes. No se puede descartar — revísalo manualmente:"
             )
-        else:
+            for e in ecosistema:
+                ip = f" · {e['ip']}" if e["ip"] else ""
+                st.markdown(
+                    f"- {EMOJI_CRIT.get(e['criticidad'], '⚪')} **{e['nombre']}**{ip} "
+                    f"→ sobre {', '.join(e['coincidencias_plataforma'])}"
+                )
+
+        if not afectados:
             st.success(
                 "🏢 **Sin coincidencias con tu inventario** — "
-                "No se detectaron tecnologías afectadas en tu entorno registrado."
+                "Ninguno de tus equipos registrados usa las tecnologías afectadas."
             )
 
     st.divider()

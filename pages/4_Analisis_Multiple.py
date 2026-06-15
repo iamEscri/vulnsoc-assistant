@@ -4,6 +4,7 @@ import altair as alt
 import streamlit as st
 from modules.ingesta import analizar_cve
 from modules.scoring import calcular_score, ajustar_por_inventario
+from modules.inventario import equipos_afectados
 from modules.ui import badge_prioridad, badge_kev, chip, color_prioridad, COLORES_PRIORIDAD
 from modules.analisis_ia import generar_analisis
 
@@ -85,6 +86,13 @@ if analizar and texto_cves.strip():
         # 3. Análisis IA
         analisis = generar_analisis(resultado["nvd"], resultado["kev"], score)
 
+        # 3b. Equipos del inventario afectados por este CVE
+        afectados = equipos_afectados(
+            st.session_state.get("inventario", {}),
+            resultado["nvd"].get("productos_afectados", []),
+            resultado["nvd"].get("plataformas_afectadas", []),
+        )
+
         # 4. Guardar en historial de sesión (igual que app.py)
         ids_en_historial = [e["cve_id"] for e in st.session_state.historial]
         entrada = {
@@ -95,6 +103,7 @@ if analizar and texto_cves.strip():
             "tipo": score.get("tipo_vulnerabilidad", "Desconocido"),
             "en_kev": resultado["kev"].get("en_kev", False),
             "epss_score": score.get("epss_score", 0),
+            "equipos_afectados": afectados,
             "resultado": resultado,
             "score": score,
             "analisis": analisis,
@@ -126,9 +135,14 @@ if resultados_multiple:
     total    = len(resultados_ordenados)
     criticos = sum(1 for e in resultados_ordenados if e["prioridad"] == "CRÍTICA")
     en_kev   = sum(1 for e in resultados_ordenados if e["en_kev"])
+    # CVEs que afectan a algún equipo confirmado del inventario
+    afectan_equipos = sum(
+        1 for e in resultados_ordenados
+        if any(eq["coincidencias"] for eq in e.get("equipos_afectados", []))
+    )
 
     st.markdown(f"""
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.65rem;margin-bottom:1.5rem;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.65rem;margin-bottom:1.5rem;">
         <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-top:3px solid #4da6ff;border-radius:7px;padding:0.85rem 1rem;">
             <div style="color:rgba(255,255,255,0.4);font-size:0.67rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">CVEs analizados</div>
             <div style="color:#e6edf3;font-size:1.5rem;font-weight:700;">{total}</div>
@@ -140,6 +154,10 @@ if resultados_multiple:
         <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-top:3px solid #ff8c00;border-radius:7px;padding:0.85rem 1rem;">
             <div style="color:rgba(255,255,255,0.4);font-size:0.67rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">En CISA KEV</div>
             <div style="color:#ff8c00;font-size:1.5rem;font-weight:700;">{en_kev}</div>
+        </div>
+        <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-top:3px solid #ff6b6b;border-radius:7px;padding:0.85rem 1rem;">
+            <div style="color:rgba(255,255,255,0.4);font-size:0.67rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">Afectan a equipos</div>
+            <div style="color:#ff6b6b;font-size:1.5rem;font-weight:700;">{afectan_equipos}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -187,6 +205,22 @@ if resultados_multiple:
 
         col_info, col_btn = st.columns([6, 1])
 
+        # Equipos del inventario afectados — confirmados (coincidencia de producto)
+        afectados = entrada.get("equipos_afectados", [])
+        confirmados = [e for e in afectados if e["coincidencias"]]
+        if confirmados:
+            EMOJI_CRIT = {"alta": "🔴", "media": "🟠", "baja": "🟢"}
+            etiquetas = " ".join(
+                f"{EMOJI_CRIT.get(e['criticidad'], '⚪')} {e['nombre']}"
+                for e in confirmados
+            )
+            equipos_html = (
+                f'<span style="color:#ff6b6b;font-size:0.8rem;font-weight:600;">'
+                f'🏢 Afecta a: {etiquetas}</span>'
+            )
+        else:
+            equipos_html = ""
+
         with col_info:
             st.markdown(f"""
             <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);
@@ -200,6 +234,7 @@ if resultados_multiple:
                 {chip(entrada['tipo'])}
                 <span style="color:rgba(255,255,255,0.4);font-size:0.8rem;">EPSS {epss_pct}</span>
                 {kev_html}
+                {equipos_html}
             </div>
             """, unsafe_allow_html=True)
 
