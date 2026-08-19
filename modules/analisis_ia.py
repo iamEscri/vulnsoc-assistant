@@ -22,7 +22,7 @@ def _get_openai_client():
 def _llamar_groq(prompt: str) -> str:
     client = _get_groq_client()
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
         max_tokens=1024
