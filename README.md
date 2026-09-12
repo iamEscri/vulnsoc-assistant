@@ -1,3 +1,13 @@
+# VulnSOC · Vulnerability Intelligence
+
+Interfaz de análisis con navegación superior, paleta azul petróleo/acero y buscador CVE inmediato. El desglose visual del **score interno** muestra aportaciones positivas, negativas y neutras, con su acumulado y evidencia consultable. Se mantiene el valor visible limitado a 100 y la prioridad calculada por el motor original.
+
+La interfaz conserva análisis individual y múltiple, búsqueda por tecnología/versión CPE, inventario, historial local, importación/exportación, PDF, IA y Sigma. La pestaña de mitigación presenta el contenido existente sin nuevas llamadas ni cambios de scoring. Los datos incompletos de un historial importado se identifican como desglose parcial; no se inventan factores.
+
+**Inicio local y despliegue:** [guía](deploy/README.md). Desarrollo con React y TypeScript; transiciones discretas y preferencia de movimiento reducido. No hay cuentas ni sincronización entre dispositivos. Se han eliminado las visualizaciones decorativas y el footer de gran formato.
+
+---
+
 <div align="center">
 
 <img src="assets/logo.png" alt="VulnSOC Assistant" width="180"/>

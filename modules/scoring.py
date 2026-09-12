@@ -110,7 +110,7 @@ def calcular_score(datos_nvd: dict, datos_kev: dict, datos_epss: dict = None) ->
     if fecha_pub:
         try:
             fecha = datetime.fromisoformat(fecha_pub)
-            dias = (datetime.now() - fecha).days
+            dias = (datetime.now(fecha.tzinfo) - fecha).days
             if dias < 30:
                 puntuacion += 20
                 factores.append({

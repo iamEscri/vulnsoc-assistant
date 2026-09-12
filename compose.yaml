@@ -1,0 +1,51 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      app:
+        ipv4_address: 172.29.0.2
+    mem_limit: 256m
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      STATE_DB: /data/state.sqlite3
+    volumes:
+      - app_data:/data
+    networks:
+      - app
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    mem_limit: 2g
+    cpus: 2
+    security_opt:
+      - no-new-privileges:true
+networks:
+  app:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+volumes:
+  caddy_data:
+  caddy_config:
+  app_data:
