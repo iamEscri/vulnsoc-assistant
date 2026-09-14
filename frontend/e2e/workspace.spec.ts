@@ -102,3 +102,19 @@ test('historical report can be updated to the current methodology',async({page})
  await page.route('**/api/analyze',r=>r.fulfill({json:{...fixture,score_interno:160,score:{score_interno:160,prioridad:'CRÍTICA',metodologia_version:'2.0',provisional:false,advertencias:[],factores:[{factor:'CVSS',puntos:100,detalle:'10/10'},{factor:'KEV',puntos:60,detalle:'Explotación documentada'}]}}}));
  await page.getByRole('button',{name:'Actualizar análisis',exact:true}).click();await expect(page.getByText('Metodología 2.0',{exact:true})).toBeVisible();await expect(page.locator('.internal-number')).toHaveText('160pts');
 });
+
+test('saved AI Markdown renders in analysis and mitigation without regeneration',async({page})=>{
+ const markdown='### Descripción de la vulnerabilidad\n\n- **Producto afectado:** Apache Log4j\n\n| Factor | Puntos |\n| --- | --- |\n| KEV | 60 |\n\n```yaml\ntitle: Detection\n```';
+ await page.route('**/api/analyze',r=>r.fulfill({json:{...fixture,analisis:{resumen_ejecutivo:markdown,analisis_tecnico:markdown,plan_mitigacion:markdown}}}));
+ await page.goto('/');await page.getByLabel('Identificador CVE').fill(fixture.cve_id);await page.getByRole('button',{name:'Investigar',exact:true}).click();
+ await page.getByRole('tab',{name:'Análisis con IA',exact:true}).click();
+ const text=page.locator('.analysis-markdown').first();
+ await expect(text.getByRole('heading',{name:'Descripción de la vulnerabilidad'})).toBeVisible();
+ await expect(text.locator('strong')).toHaveText('Producto afectado:');
+ await expect(text.getByRole('cell',{name:'60',exact:true})).toBeVisible();
+ await page.setViewportSize({width:360,height:800});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.getByRole('tab',{name:'Mitigación',exact:true}).click();
+ await expect(page.locator('.analysis-markdown h4')).toHaveText('Descripción de la vulnerabilidad');
+ await page.locator('.analysis-markdown').screenshot({path:'artifacts/ai-markdown-mobile.png'});
+});
