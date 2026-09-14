@@ -211,3 +211,4 @@ node_modules/
 artifacts/
 frontend/test-results/
 frontend/playwright-report/
+frontend/.vite/
