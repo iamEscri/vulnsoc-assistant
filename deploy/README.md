@@ -60,6 +60,19 @@ Mantén el volumen `app_data` para conservar cuotas entre reinicios. Respaldar `
 
 ## Comprobación
 
+### Conflicto de IP durante el primer arranque
+
+La web usa `172.29.0.2` y la API `172.29.0.3`. Ambas direcciones son explícitas para evitar que la API, que arranca primero, reciba automáticamente la dirección del proxy. Si se desplegó la configuración anterior y aparece `failed to set up container networking: Address already in use`, actualiza y recrea los contenedores y la red:
+
+```bash
+git pull --ff-only origin main
+sudo docker compose down
+sudo docker compose up -d --build
+sudo docker compose ps
+```
+
+No añadas `-v` a `down`: los volúmenes conservan certificados y estado operativo. Si cambias la subred, actualiza ambas IP y la dirección del proxy de confianza en `deploy/Dockerfile.api`.
+
 ```bash
 npm run build --prefix frontend
 npm test --prefix frontend
