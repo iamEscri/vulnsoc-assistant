@@ -16,11 +16,13 @@ Modelo de datos (en st.session_state.inventario):
     }
 
 Cada equipo agrupa su stack tecnologico. Asi, ante un CVE, no solo sabemos
-SI nos afecta sino EN QUE equipos concretos. La criticidad es informativa
-(se muestra en la notificacion); no altera el score.
+SI nos afecta sino EN QUE equipos concretos. La criticidad y exposición contextualizan candidatos con versión compatible;
+no se declara afectación confirmada por coincidencias de texto.
 """
 
 import json
+import re
+from modules.evidencia import normalizar_nombre, partes_cpe, version_en_rango
 
 CRITICIDADES = ["alta", "media", "baja"]
 
@@ -71,6 +73,7 @@ def importar_inventario(contenido) -> dict:
             "nombre": nombre,
             "ip": str(equipo.get("ip", "")).strip(),
             "criticidad": crit if crit in CRITICIDADES else "media",
+            "exposicion": equipo.get("exposicion") if equipo.get("exposicion") in ("internet", "interna") else "desconocida",
             "tecnologias": [str(t).strip() for t in tecnologias if str(t).strip()],
         })
 
@@ -136,52 +139,44 @@ def tecnologias_inventario(inventario: dict) -> set:
     return palabras
 
 
+def _identidad_tecnologia(text):
+    parts = partes_cpe(text)
+    if parts:
+        return normalizar_nombre(f'{parts[3]} {parts[4]}'), parts[5]
+    match = re.fullmatch(r'(.*?)\s+([0-9][0-9a-zA-Z.+_-]*)', text.strip())
+    return (normalizar_nombre(match[1]), match[2]) if match else (normalizar_nombre(text), None)
+
+
 def equipos_afectados(inventario: dict, productos_afectados: list,
-                      plataformas_afectadas: list = None) -> list:
+                      plataformas_afectadas: list = None, cpe_afectados: list = None) -> list:
+    """Candidates, never confirmed affected hosts. Exact product identity first.
+
+    Version compatibility is limited to simple numeric CPE ranges. Negation,
+    environmental AND requirements and special CPE attributes remain unverified.
     """
-    Cruza el CVE con cada equipo del inventario.
-
-    Devuelve una lista de equipos con coincidencias, cada uno como:
-        {
-            "nombre": str,
-            "ip": str,
-            "criticidad": str,
-            "coincidencias": [tecnologias del equipo que coinciden con productos],
-            "coincidencias_plataforma": [coincidencias a nivel de plataforma],
-        }
-
-    Solo se incluyen equipos que tienen alguna coincidencia (directa o de
-    plataforma). Un equipo con coincidencia directa de producto es una
-    afectacion confirmada; uno con solo coincidencia de plataforma es un
-    "componente del ecosistema" (revisar manualmente).
-    """
-    inventario = normalizar_inventario(inventario)
-    plataformas_afectadas = plataformas_afectadas or []
-
-    palabras_productos = _palabras(productos_afectados)
-    palabras_plataformas = _palabras(plataformas_afectadas)
-
-    resultado = []
-    for equipo in inventario.get("equipos", []):
-        tecnologias = equipo.get("tecnologias", [])
-
-        coincidencias = [
-            t for t in tecnologias
-            if set(t.lower().split()).intersection(palabras_productos)
-        ]
-        coincidencias_plataforma = [
-            t for t in tecnologias
-            if set(t.lower().split()).intersection(palabras_plataformas)
-            and t not in coincidencias
-        ]
-
-        if coincidencias or coincidencias_plataforma:
-            resultado.append({
-                "nombre": equipo.get("nombre", "Sin nombre"),
-                "ip": equipo.get("ip", ""),
-                "criticidad": equipo.get("criticidad", "media"),
-                "coincidencias": coincidencias,
-                "coincidencias_plataforma": coincidencias_plataforma,
-            })
-
-    return resultado
+    catalog = []
+    for match in cpe_afectados or []:
+        parts = partes_cpe(match.get('criteria', ''))
+        if parts:
+            catalog.append(({normalizar_nombre(f'{parts[3]} {parts[4]}'), normalizar_nombre(parts[4])}, match))
+    if not catalog:
+        # Legacy product labels do not carry enough evidence to verify versions.
+        catalog = [({normalizar_nombre(p)}, None) for p in productos_afectados]
+    platforms = {normalizar_nombre(p) for p in plataformas_afectadas or []}
+    result = []
+    for asset in normalizar_inventario(inventario).get('equipos', []):
+        coincidencias, ecosystem, evidence = [], [], []
+        for tech in asset.get('tecnologias', []):
+            identity, version = _identidad_tecnologia(tech)
+            candidates = [m for names, m in catalog if identity and identity in names]
+            if candidates:
+                statuses = [version_en_rango(version, m) if m else None for m in candidates]
+                state = 'version_compatible' if True in statuses else 'posible' if None in statuses else 'fuera_de_rango'
+                coincidencias.append(tech)
+                evidence.append({'tecnologia': tech, 'estado': state, 'version': version, 'criterios': [m['criteria'] for m in candidates if m]})
+            elif identity in platforms:
+                ecosystem.append(tech)
+        if coincidencias or ecosystem:
+            state = 'version_compatible' if any(e['estado'] == 'version_compatible' for e in evidence) else 'posible' if any(e['estado'] == 'posible' for e in evidence) or ecosystem else 'fuera_de_rango'
+            result.append({'nombre': asset.get('nombre', 'Sin nombre'), 'criticidad': asset.get('criticidad', 'media'), 'exposicion': asset.get('exposicion', 'desconocida'), 'coincidencias': coincidencias, 'coincidencias_plataforma': ecosystem, 'estado': state, 'evidencias': evidence, 'limitacion': 'Compatibilidad de producto/versión; verificar configuración y aplicabilidad. No confirma explotación ni compromiso.'})
+    return result

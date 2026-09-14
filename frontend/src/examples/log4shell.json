@@ -1,0 +1,125 @@
+{
+  "cve_id": "CVE-2021-44228",
+  "resultado": {
+    "nvd": {
+      "cve_id": "CVE-2021-44228",
+      "descripcion": "Apache Log4j2 2.0-beta9 through 2.15.0 (excluding security releases 2.12.2, 2.12.3, and 2.3.1) JNDI features used in configuration, log messages, and parameters do not protect against attacker controlled LDAP and other JNDI related endpoints. An attacker who can control log messages or log message parameters can execute arbitrary code loaded from LDAP servers when message lookup substitution is enabled. From log4j 2.15.0, this behavior has been disabled by default. From version 2.16.0 (along with 2.12.2, 2.12.3, and 2.3.1), this functionality has been completely removed. Note that this vulnerability is specific to log4j-core and does not affect log4net, log4cxx, or other Apache Logging Services projects.",
+      "cvss_score": 10.0,
+      "cvss_version": "3.1",
+      "vector_ataque": {
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "NONE",
+        "userInteraction": "NONE"
+      },
+      "cwes": [
+        "CWE-20",
+        "CWE-400",
+        "CWE-502",
+        "CWE-917"
+      ],
+      "fecha_publicacion": "2021-12-10T10:15:09.143",
+      "fecha_modificacion": "2026-08-11T19:33:44.513",
+      "referencias": [
+        "http://packetstormsecurity.com/files/165225/Apache-Log4j2-2.14.1-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/165260/VMware-Security-Advisory-2021-0028.html",
+        "http://packetstormsecurity.com/files/165261/Apache-Log4j2-2.14.1-Information-Disclosure.html",
+        "http://packetstormsecurity.com/files/165270/Apache-Log4j2-2.14.1-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/165281/Log4j2-Log4Shell-Regexes.html"
+      ],
+      "parche_disponible": true,
+      "refs_parche": [
+        "http://www.openwall.com/lists/oss-security/2021/12/10/1",
+        "http://www.openwall.com/lists/oss-security/2021/12/10/2",
+        "https://logging.apache.org/log4j/2.x/security.html"
+      ],
+      "productos_afectados": [
+        "siemens 6bk1602-0aa12-0tp0 firmware",
+        "siemens 6bk1602-0aa22-0tp0 firmware",
+        "siemens 6bk1602-0aa32-0tp0 firmware",
+        "siemens 6bk1602-0aa42-0tp0 firmware",
+        "siemens 6bk1602-0aa52-0tp0 firmware",
+        "apache log4j",
+        "siemens sppa-t3000 ses3000 firmware",
+        "siemens capital",
+        "siemens comos",
+        "siemens desigo cc advanced reports",
+        "siemens desigo cc info center",
+        "siemens e-car operation center",
+        "siemens energy engage",
+        "siemens energyip",
+        "siemens energyip prepay",
+        "siemens gma-manager",
+        "siemens head-end system universal device integration system",
+        "siemens industrial edge management",
+        "siemens industrial edge management hub",
+        "siemens logo\\! soft comfort"
+      ],
+      "plataformas_afectadas": [
+        "eclipse",
+        "linux",
+        "vmware vsphere",
+        "windows"
+      ]
+    },
+    "kev": {
+      "en_kev": true,
+      "nombre": "Apache Log4j2 Remote Code Execution Vulnerability",
+      "fecha_añadido": "2021-12-10",
+      "accion_requerida": "For all affected software assets for which updates exist, the only acceptable remediation actions are: 1) Apply updates; OR 2) remove affected assets from agency networks. Temporary mitigations using one of the measures provided at https://www.cisa.gov/uscert/ed-22-02-apache-log4j-recommended-mitigation-measures are only acceptable until updates are available.",
+      "fecha_limite": "2021-12-24"
+    },
+    "epss": {
+      "epss_score": 0.99999,
+      "percentil": 1.0
+    }
+  },
+  "score": {
+    "metodologia_version": "2.0",
+    "umbrales": {
+      "MEDIA": 55,
+      "ALTA": 90,
+      "CRÍTICA": 130
+    },
+    "factores": [
+      {
+        "factor": "Severidad CVSS",
+        "puntos": 100,
+        "detalle": "CVSS 3.1: 10.0/10. Vector y CWE no reciben puntos adicionales."
+      },
+      {
+        "factor": "Explotación documentada · KEV",
+        "puntos": 60,
+        "detalle": "Inclusión en CISA KEV desde 2021-12-10. No prueba explotación de tus activos."
+      },
+      {
+        "factor": "EPSS · señal predictiva",
+        "puntos": 0,
+        "detalle": "Probabilidad 100.00% a 30 días. KEV tiene precedencia; EPSS no suma otra bonificación."
+      }
+    ],
+    "advertencias": [],
+    "calidad_datos": {
+      "cvss": "disponible",
+      "kev": "disponible",
+      "epss": "disponible"
+    },
+    "kev_confirmado": true,
+    "score_cvss_puro": 100,
+    "epss_score": 0.99999,
+    "tipo_vulnerabilidad": "Validación de entrada",
+    "contexto_inventario": "sin_inventario",
+    "score_interno": 160,
+    "prioridad": "CRÍTICA",
+    "accion_recomendada": "Revisar con urgencia la aplicabilidad y priorizar mitigación o parche.",
+    "provisional": false
+  },
+  "analisis": {},
+  "score_interno": 160,
+  "prioridad": "CRÍTICA",
+  "tipo": "Validación de entrada",
+  "en_kev": true,
+  "epss_score": 0.99999,
+  "equipos_afectados": [],
+  "fecha": "2026-09-13T13:18:32.329955+00:00"
+}

@@ -19,6 +19,14 @@ npm ci --prefix frontend
 npm run dev --prefix frontend
 ```
 
+Con las dependencias instaladas, puedes iniciar **web y API juntas** desde la raíz:
+
+```bash
+python3 scripts/dev.py
+```
+
+Mantén esa terminal abierta. `Ctrl+C` detiene ambos servicios. No ejecutes simultáneamente este comando y los arranques individuales anteriores.
+
 Abre http://127.0.0.1:5173. El frontend reenvía `/api` al puerto 8010. Documentación de API: http://127.0.0.1:8010/api/docs. Node 22 LTS recomendado. El frontend está compilado y tipado con TypeScript; no requiere Node en producción.
 
 ## Publicar en el VPS
@@ -36,7 +44,7 @@ NVD_API_KEY=
 GITHUB_TOKEN=
 ```
 
-`NVD_API_KEY` es opcional. El buscador CPE espacia sus consultas a NVD; el análisis individual conserva el cliente de ingesta original. La búsqueda SigmaHQ original puede no estar disponible sin autenticación; se conserva su alternativa mediante IA. La imagen incluye Groq; los adaptadores históricos Gemini/OpenAI requieren sus SDK adicionales y modelos vigentes si se decide activarlos.
+`NVD_API_KEY` es opcional. El buscador CPE espacia sus consultas a NVD; el análisis individual y la búsqueda comparten el cliente de consultas espaciadas y la selección CVSS. La búsqueda SigmaHQ original puede no estar disponible sin autenticación; se conserva su alternativa mediante IA. La imagen incluye Groq; los adaptadores históricos Gemini/OpenAI requieren sus SDK adicionales y modelos vigentes si se decide activarlos.
 
 ```bash
 docker compose up -d --build
@@ -64,3 +72,33 @@ docker compose config --quiet
 El servidor Vite debe estar en ejecución para las pruebas Playwright. Puedes indicar un Chromium existente con `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. Las pruebas de navegador simulan las APIs: verifican interfaz, recuperación tras recargar, importación/exportación, búsqueda CPE, fallos de IA y lotes parciales sin gastar cuota real. Las capturas generadas están en `artifacts/`.
 
 Antes de promocionarlo, comprueba en el VPS el dominio, TLS, conectividad NVD/CISA/EPSS, una generación real con Groq y descarga PDF. El despliegue remoto no se ha ejecutado desde este proyecto. Streamlit sigue disponible como referencia histórica con `streamlit run app.py`; la web 2.0 se inicia mediante las instrucciones anteriores.
+
+## Ejemplos preanalizados
+
+La home incluye Log4Shell y Terrapin consultados el 13/09/2026 a través de NVD, CISA KEV y FIRST EPSS, con el motor real y sin inventario. Las instantáneas están en `frontend/src/examples/`. Son material explicativo fechado, no datos actuales ni análisis del entorno del visitante. Seleccionarlos no modifica el historial. «Analizar con datos actuales» consulta la API y guarda el resultado como cualquier otro análisis.
+
+Para actualizarlos, usa `/api/analyze` sin inventario ni IA, comprueba que ninguna fuente devuelve error y sustituye la instantánea completa conservando su `fecha`. No edites a mano factores o puntuaciones.
+
+## Verificación histórica del 13/09/2026 (política anterior)
+
+- Consultas reales de Log4Shell y Terrapin: NVD, KEV y EPSS disponibles; 225 y 119 puntos respectivamente, sin inventario.
+- Búsqueda real CPE de Tomcat 9.0.80: un producto; búsqueda de vulnerabilidades: 59 resultados, primera página de 20.
+- Generación real de las tres secciones de IA con Groq y exportación de PDF con contenido extraíble.
+- Sigma: se corrigió la aceptación de respuestas vacías. La generación real devuelve un borrador experimental descargable; su eficacia de detección no se ha validado.
+- Prueba Playwright real de análisis, IA, Sigma y descarga PDF. Para repetirla con API y claves configuradas (consume cuota):
+
+```bash
+VULNSOC_LIVE=1 npx --prefix frontend playwright test --config frontend/playwright.config.ts live.spec.ts
+```
+
+La suite normal omite esta prueba externa. Las instantáneas de ejemplo no sustituyen una consulta actual. Estas comprobaciones se realizaron en local; dominio, HTTPS y operación remota en el VPS siguen pendientes.
+
+## Puntuación contextual única
+
+La interfaz, la API web, los PDF y el contexto enviado a IA utilizan `score_interno` como única puntuación VulnSOC, sin límite superior ni denominador. CVSS mantiene su escala propia de 0–10 y EPSS su probabilidad. Los historiales antiguos con `score_mostrado` siguen siendo importables; ese campo heredado no se presenta ni interviene en la prioridad. El motor conserva un alias heredado de compatibilidad; no se utiliza para priorizar en la web.
+
+## Metodología 2.0 · verificación del 14/09/2026
+
+Consulta las reglas y límites en [docs-methodology.md](../docs-methodology.md). La consulta real de Log4Shell devuelve 160 puntos y prioridad crítica con CVSS, KEV y EPSS disponibles. Los ejemplos fechados de la home se han evaluado con política 2.0: Log4Shell 160, Terrapin 89. Los valores 225/119 anteriores corresponden a la metodología histórica y no son comparables directamente.
+
+El despliegue actualiza el formato de caché de fuentes. La clave de IA incorpora fuentes, score y versión de metodología. Los historiales del navegador se conservan: la interfaz permite reanalizar explícitamente. La criticidad y la exposición se aplican solo con compatibilidad de versión, no por coincidencia de fabricante.

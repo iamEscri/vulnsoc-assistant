@@ -238,12 +238,14 @@ def generar_pdf(datos_nvd, datos_kev, datos_epss, score, analisis):
     story.append(sp(6))
 
     kev_on  = datos_kev.get("en_kev", False)
-    epss_v  = score.get("epss_score", 0.0)
+    epss_v  = datos_epss.get("epss_score")
+    epss_known = isinstance(epss_v, (int, float)) and not datos_epss.get("error")
+    kev_known = isinstance(datos_kev.get("en_kev"), bool) and not datos_kev.get("error")
     cvss_p  = score.get("score_cvss_puro", 0)
 
-    kev_h   = "#dc2626" if kev_on else "#16a34a"
-    kev_txt = "ACTIVA"  if kev_on else "No"
-    epss_h  = ("#dc2626" if epss_v > 0.7 else "#ea580c" if epss_v > 0.3 else "#16a34a")
+    kev_h   = "#dc2626" if kev_on else "#475569"
+    kev_txt = "INCLUIDA" if kev_on and kev_known else "No listada" if kev_known else "Sin verificar"
+    epss_h  = "#475569" if not epss_known else ("#dc2626" if epss_v > 0.7 else "#ea580c" if epss_v > 0.3 else "#334155")
     cvss_h  = ("#dc2626" if cvss_p >= 90 else "#ea580c" if cvss_p >= 70
                else "#d97706" if cvss_p >= 40 else "#16a34a")
 
@@ -251,20 +253,19 @@ def generar_pdf(datos_nvd, datos_kev, datos_epss, score, analisis):
     def _val(t, h="#0f172a"):
         return Paragraph(f'<font color="{h}">{_x(str(t))}</font>', S["mv"])
 
-    labels = [_lbl("SCORE SISTEMA"), _lbl("SCORE INTERNO"), _lbl("CVSS PURO"),
+    labels = [_lbl("VULNSOC SCORE"), _lbl("CVSS"),
               _lbl("PRIORIDAD"),     _lbl("CISA KEV"),       _lbl("EPSS"),
               _lbl("TIPO")]
     values = [
-        _val(f"{score.get('score_mostrado', 0)}/100", p_hex),
-        _val(score.get("score_interno", 0),            p_hex),
-        _val(f"{cvss_p}/100",                          cvss_h),
+        _val(("Sin determinar" if prior == "SIN DETERMINAR" else f"{score.get('score_interno', score.get('score_mostrado', 0))} pts"), p_hex),
+        _val((f"{datos_nvd['cvss_score']}/10" if datos_nvd.get('cvss_score') is not None else "Sin datos"), cvss_h),
         _val(prior,                                    p_hex),
         _val(kev_txt,                                  kev_h),
-        _val(f"{epss_v:.1%}",                          epss_h),
+        _val(f"{epss_v:.1%}" if epss_known else "Sin datos", epss_h),
         _val(score.get("tipo_vulnerabilidad", "-"),    "#334155"),
     ]
 
-    mt = Table([labels, values], colWidths=[CW / 7] * 7)
+    mt = Table([labels, values], colWidths=[CW / 6] * 6)
     mt.setStyle(TableStyle([
         ("GRID",          (0, 0), (-1, -1), 0.4, BORDER),
         ("BACKGROUND",    (0, 0), (-1, -1), WHITE),
@@ -277,12 +278,19 @@ def generar_pdf(datos_nvd, datos_kev, datos_epss, score, analisis):
     ]))
     story += [mt, sp(10)]
 
+    methodology = score.get('metodologia_version', 'histórica / sin versión')
+    status = 'PROVISIONAL' if score.get('provisional', True) else 'Orientativa'
+    notes = [f"Metodología {methodology} · {status}. Política propia, no probabilidad de riesgo calibrada.", score.get('accion_recomendada', 'Reanalizar para aplicar la política actual.'), *score.get('advertencias', [])]
+    for note in notes:
+        story.append(Paragraph(_x(note), ParagraphStyle('methodology', fontName='Helvetica', fontSize=9, leading=13, spaceAfter=5)))
+    story.append(sp(6))
+
     # ── 4. Alerta KEV ────────────────────────────────────────────────────
     if kev_on:
         kev_msg = (
-            f"EXPLOTACION ACTIVA CONFIRMADA  -  "
+            f"EXPLOTACION DOCUMENTADA POR CISA  -  "
             f"Incluido en CISA KEV el {datos_kev.get('fecha_añadido', 'N/A')}  |  "
-            f"Fecha limite de parche: {datos_kev.get('fecha_limite', 'N/A')}"
+            f"Fecha de directiva CISA (según ámbito): {datos_kev.get('fecha_limite', 'N/A')}"
         )
         kab = Table(
             [[Paragraph(_x(kev_msg),

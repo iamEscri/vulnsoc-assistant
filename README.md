@@ -1,229 +1,77 @@
-# VulnSOC · Vulnerability Intelligence
-
-Interfaz de análisis con navegación superior, paleta azul petróleo/acero y buscador CVE inmediato. El desglose visual del **score interno** muestra aportaciones positivas, negativas y neutras, con su acumulado y evidencia consultable. Se mantiene el valor visible limitado a 100 y la prioridad calculada por el motor original.
-
-La interfaz conserva análisis individual y múltiple, búsqueda por tecnología/versión CPE, inventario, historial local, importación/exportación, PDF, IA y Sigma. La pestaña de mitigación presenta el contenido existente sin nuevas llamadas ni cambios de scoring. Los datos incompletos de un historial importado se identifican como desglose parcial; no se inventan factores.
-
-**Inicio local y despliegue:** [guía](deploy/README.md). Desarrollo con React y TypeScript; transiciones discretas y preferencia de movimiento reducido. No hay cuentas ni sincronización entre dispositivos. Se han eliminado las visualizaciones decorativas y el footer de gran formato.
-
----
-
-<div align="center">
-
-<img src="assets/logo.png" alt="VulnSOC Assistant" width="180"/>
-
 # VulnSOC Assistant
 
-**Sistema inteligente de análisis y priorización de vulnerabilidades para SOC basado en IA Generativa**
+Herramienta personal y profesional de **Vulnerability Intelligence**, creada por [iamEscri](https://github.com/iamEscri). Nació como TFM de ciberseguridad y evolucionó hacia una interfaz React con una API Python.
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Demo](https://img.shields.io/badge/Demo-Live-success?logo=streamlit)](https://vulnsoc-assistant.streamlit.app)
+Combina NVD, CISA KEV y FIRST EPSS con una política de priorización explicable. El resultado incluye prioridad, puntos, factores y limitaciones de los datos. La IA complementa las evidencias; no determina el score.
 
-[🚀 Demo en vivo](https://vulnsoc-assistant.streamlit.app) · [📋 Características](#-características) · [⚙️ Instalación](#%EF%B8%8F-instalación) · [🧮 Motor de scoring](#-motor-de-scoring-contribución-principal)
+## Funcionalidades
 
-</div>
+- Análisis individual y por lotes de CVEs.
+- Búsqueda por descripción o producto y versión CPE.
+- Puntuación contextual única, sin tope artificial, con desglose interactivo.
+- Inventario local con tecnologías, criticidad y exposición declarada.
+- Correlación conservadora de producto y versión; no es un escáner ni confirma compromiso.
+- Historial local, importación/exportación JSON y actualización de informes históricos.
+- Análisis de IA, borradores Sigma y exportación PDF.
+- Ejemplos fechados de Log4Shell y Terrapin, separados del historial.
+- Interfaz adaptable con navegación superior y movimiento reducido.
 
----
+## Metodología 2.0
 
-## 📌 ¿Qué es VulnSOC Assistant?
+[Reglas completas, justificación y límites](docs-methodology.md).
 
-En un SOC, analizar una vulnerabilidad de forma manual puede llevar **entre 2 y 4 horas**: consultar el NVD, comprobar si está siendo explotada activamente, interpretar los datos técnicos, decidir la urgencia y redactar un informe.
+CVSS se incorpora una sola vez. KEV tiene precedencia sobre EPSS. La criticidad y la exposición solo ponderan candidatos con versión compatible. No encontrar un producto no resta puntos. Los datos desconocidos no se convierten en cero ni en baja prioridad.
 
-**VulnSOC Assistant reduce ese proceso a segundos.** El analista introduce un CVE y obtiene:
-
-- ✅ Datos reales y actualizados de **NVD**, **CISA KEV** y **EPSS**
-- ✅ Una **puntuación de prioridad contextualizada** calculada con un motor de scoring propio
-- ✅ Un **análisis completo generado por IA** (resumen ejecutivo, análisis técnico y plan de mitigación)
-- ✅ Un **informe PDF** exportable y listo para compartir
-
-> 🔑 **Principio de diseño:** la IA no inventa datos. Interpreta datos reales obtenidos de fuentes oficiales, lo que elimina el riesgo de alucinaciones en la información técnica.
-
----
-
-## ✨ Características
-
-| Funcionalidad | Descripción |
+| Prioridad | Puntos |
 |---|---|
-| 🔍 **Análisis de CVE** | Introduce un identificador CVE y obtén un análisis completo con datos en tiempo real |
-| 🧮 **Scoring contextualizado** | Priorización propia que supera las limitaciones del CVSS puro |
-| 🤖 **Análisis con IA** | Resumen ejecutivo, análisis técnico y mitigación generados por LLM con verificación estructural anti-alucinaciones |
-| 🔎 **Búsqueda inversa** | Encuentra CVEs a partir de una descripción en lenguaje natural |
-| 📊 **Análisis múltiple** | Analiza lotes de CVEs y compáralos en una tabla ordenada por prioridad real |
-| 🖥️ **Inventario de activos** | Define tu entorno (SO y software) y detecta automáticamente si un CVE te afecta mediante datos CPE |
-| 📜 **Historial de sesión** | Consulta, exporta e importa los análisis realizados (JSON) |
-| 📄 **Exportación PDF** | Genera informes profesionales con ReportLab |
-| 🔌 **Multi-proveedor de IA** | Compatible con Groq (Llama 3.3 70B), Google Gemini y OpenAI mediante una variable de entorno |
+| Baja | <55 |
+| Media | 55–89 |
+| Alta | 90–129 |
+| Crítica | ≥130 |
+| Sin determinar | Sin CVSS utilizable ni KEV confirmado |
 
----
+Son umbrales propios de una **política heurística**, no un estándar certificado ni una probabilidad calibrada. Las fuentes incompletas producen advertencias y resultados provisionales. Cada informe conserva su versión de metodología; no compares directamente puntos de versiones diferentes.
 
-## 🧮 Motor de scoring (contribución principal)
+## Ejecutar en local
 
-El **CVSS mide gravedad teórica, no urgencia real**. Una vulnerabilidad con CVSS 9.8 sin explotación conocida puede ser menos urgente que una de 7.5 que ya está siendo explotada activamente.
-
-El motor de scoring de VulnSOC Assistant parte del CVSS y lo **contextualiza con 7 factores**:
-
-| Factor | Ajuste | Justificación |
-|---|---|---|
-| CVSS base (× 10) | 0 – 100 | Punto de partida estándar |
-| Presente en **CISA KEV** | +30 | Explotación activa confirmada en el mundo real |
-| Publicada hace **< 30 días** | +20 | Menor tiempo de parcheo en las organizaciones |
-| **EPSS** > 0.7 / > 0.3 | +25 / +10 | Probabilidad real de explotación en 30 días |
-| **Tipo de vulnerabilidad** (CWE) | +8 a +25 | RCE > PrivEsc > SQLi > PathTrav > XSS > DoS |
-| **Vector de red** | +15 | Explotable remotamente |
-| **Sin autenticación / sin interacción / baja complejidad** | +10 c/u | Reduce la barrera de entrada del atacante |
-
-**Diseño de doble puntuación:**
-
-- `score_interno` — puntuación real sin límite, usada para **ordenar** vulnerabilidades entre sí
-- `score_mostrado` — capada a 100, **estable y comparable** con la escala CVSS
-
-> 📊 Ejemplo real: **PrintNightmare (CVE-2021-34527)** tiene un CVSS de 8.8 (alta, no crítica). Al estar en CISA KEV, tener EPSS elevado y ser explotable en red, el scoring contextualizado la eleva a prioridad **crítica**, que es como la trató la industria en la práctica.
-
-### Ajuste por inventario (correlación con el entorno)
-
-La urgencia real de un CVE no depende solo de la vulnerabilidad, sino de **si afecta a tu entorno concreto**. Definiendo un inventario de activos (SO y software), el motor cruza los datos **CPE** del CVE con tus tecnologías y ajusta la prioridad.
-
-El reto de diseño es **no confundir "ausencia de dato" con "ausencia real"**: los CVEs más recientes —los más urgentes— suelen no tener CPE todavía, y muchos componentes (plugins, themes) corren *sobre* una plataforma sin llamarse como ella. Penalizar esos casos genera un falso negativo sistemático contra las vulnerabilidades más nuevas. Por eso la correlación es de **cuatro estados**, no binaria:
-
-| Estado | Condición | Ajuste |
-|---|---|---|
-| ✅ **Confirmado en inventario** | El producto del CPE coincide con tu entorno | **+10** |
-| ⚠️ **Componente del ecosistema** | El producto no coincide, pero la plataforma (`target_sw` del CPE, p.ej. *WordPress*) sí | **0** |
-| ⚠️ **No verificable** | El CVE aún no tiene CPE publicado en la NVD | **0** |
-| ❌ **No detectado** | El CPE existe y no coincide con ninguna tecnología de tu entorno | **−25** |
-
-> 🔑 **Decisión clave:** solo se penaliza (−25) la ausencia **confirmada**. Un plugin de WordPress sobre un entorno que tiene WordPress no se descarta: se marca para revisión manual. Así la priorización no entierra los CVEs más nuevos por falta de datos.
-
----
-
-## 🏗️ Arquitectura
-
-El sistema está organizado en módulos independientes que trabajan en secuencia:
-
-```
-                ┌─────────────────────────────────────────┐
-  CVE-XXXX ───▶ │  1. INGESTA        modules/ingesta.py    │
-                │     NVD · CISA KEV · EPSS                │
-                └──────────────────┬──────────────────────┘
-                                   ▼
-                ┌─────────────────────────────────────────┐
-                │  2. SCORING        modules/scoring.py    │
-                │     Motor propio de 7 factores           │
-                └──────────────────┬──────────────────────┘
-                                   ▼
-                ┌─────────────────────────────────────────┐
-                │  3. ANÁLISIS IA    modules/analisis_ia.py│
-                │     Groq / Gemini / OpenAI · temp 0.1    │
-                └──────────────────┬──────────────────────┘
-                                   ▼
-                ┌─────────────────────────────────────────┐
-                │  4. OUTPUT         app.py + exportar_pdf │
-                │     Dashboard Streamlit · Informe PDF    │
-                └─────────────────────────────────────────┘
-```
-
-### Fuentes de datos
-
-| Fuente | Qué aporta |
-|---|---|
-| [NVD](https://nvd.nist.gov/) | Datos oficiales del CVE: descripción, CVSS, CWE, CPE, referencias |
-| [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) | Catálogo de vulnerabilidades con explotación activa confirmada |
-| [EPSS](https://www.first.org/epss/) | Probabilidad estadística de explotación en los próximos 30 días |
-
----
-
-## ⚙️ Instalación
-
-### Requisitos
-
-- Python 3.12+
-- Una API key de al menos un proveedor de IA ([Groq](https://console.groq.com/) es gratuito y es el proveedor recomendado)
-
-### Pasos
+Requiere Python 3.12 y Node compatible con las dependencias del frontend.
 
 ```bash
-# 1. Clonar el repositorio
-git clone https://github.com/iamEscri/vulnsoc-assistant.git
-cd vulnsoc-assistant
-
-# 2. Crear y activar un entorno virtual
-python3 -m venv venv
-source venv/bin/activate        # Linux / macOS
-# venv\Scripts\activate         # Windows
-
-# 3. Instalar dependencias
-pip install -r requirements.txt
-
-# 4. Configurar variables de entorno
-cp .env.example .env
-# Edita .env y añade tu API key
+python3 -m venv .venv
+.venv/bin/pip install -r backend/requirements.lock
+npm ci --prefix frontend
+python3 scripts/dev.py
 ```
 
-### Configuración (`.env`)
+Abre http://127.0.0.1:5173. Mantén la terminal abierta; Ctrl+C detiene web y API. La API escucha solo en localhost:8010 y su documentación está en `/api/docs`.
 
-```env
-IA_PROVIDER=groq          # groq | gemini | openai
-GROQ_API_KEY=tu_api_key
-GEMINI_API_KEY=
-OPENAI_API_KEY=
-```
+Configura las claves en `.env` siguiendo `.env.example`. Las consultas oficiales y el PDF no requieren IA. Groq requiere una clave para generar análisis o Sigma cuando no hay una regla recuperable. Las claves permanecen en el servidor y nunca deben subirse al repositorio.
 
-### Ejecución
+## Validación
 
 ```bash
-streamlit run app.py
+npm run build --prefix frontend
+npm test --prefix frontend
+.venv/bin/python -m unittest discover -s tests -v
+npx --prefix frontend playwright test --config frontend/playwright.config.ts workspace.spec.ts
 ```
 
-La aplicación estará disponible en `http://localhost:8501`.
+Playwright requiere Chromium instalado y la web arrancada. Las pruebas de interfaz habituales simulan las respuestas de servicios. La prueba `live.spec.ts` es voluntaria: usa fuentes y proveedor reales y consume cuota; consulta la [guía de despliegue](deploy/README.md).
 
-> 💡 También puedes analizar un CVE directamente por URL: `http://localhost:8501/?cve=CVE-2021-34527`
+Las pruebas verifican regresiones y consistencia de política, no eficacia predictiva ni detecciones Sigma en producción.
 
----
+## Publicación y datos
 
-## 📁 Estructura del proyecto
+[Guía de VPS, Docker Compose, HTTPS y operación](deploy/README.md).
 
-```
-vulnsoc-assistant/
-├── app.py                      # Página principal: análisis de CVE, métricas y exportación PDF
-├── main.py                     # Ejemplo de uso de los módulos por línea de comandos
-├── modules/
-│   ├── ingesta.py              # Conexión con las APIs de NVD, CISA KEV y EPSS
-│   ├── scoring.py              # Motor de priorización contextualizada (7 factores)
-│   ├── analisis_ia.py          # Análisis con IA multi-proveedor y detección de alucinaciones
-│   └── exportar_pdf.py         # Generación de informes PDF con ReportLab
-├── pages/
-│   ├── 1_Buscar_CVEs.py        # Búsqueda inversa de CVEs por descripción
-│   ├── 2_Historial.py          # Historial de sesión con exportación/importación
-│   ├── 3_Acerca_de.py          # Documentación del sistema
-│   ├── 4_Analisis_Multiple.py  # Análisis por lotes con tabla comparativa
-│   └── 5_Inventario.py         # Inventario de activos y correlación con CPE
-├── requirements.txt
-├── .env.example
-└── LICENSE
-```
+El historial y el inventario permanecen en IndexedDB del navegador. El inventario se envía al backend para contextualizar un análisis. No existen cuentas ni sincronización entre dispositivos. Exporta tus datos antes de cambiar de dominio o borrar el almacenamiento del navegador.
 
----
+La IA puede cometer errores. Los borradores Sigma requieren revisión y pruebas técnicas. Las referencias del proveedor y la configuración real del activo deben verificarse antes de decidir una remediación.
 
-## 🎓 Contexto académico
+El código Streamlit original (`app.py`) se conserva como referencia del TFM. La aplicación web mantenida se inicia con React y FastAPI según estas instrucciones.
 
-Este proyecto se ha desarrollado como **Trabajo Fin de Máster en Ciberseguridad**, dentro del área *IA Generativa en la gestión de vulnerabilidades*.
+## Fuentes
 
-Su aportación académica central es demostrar, con CVEs reales, que un **scoring contextualizado** (explotación activa, probabilidad de explotación, tipo de vulnerabilidad y vector de ataque) **reordena la priorización** respecto al CVSS puro, acercándola a la urgencia operativa real de un SOC.
+[NVD](https://nvd.nist.gov/) · [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) · [FIRST EPSS](https://www.first.org/epss/)
 
----
-
-## 📄 Licencia
-
-Este proyecto está bajo la licencia [MIT](LICENSE).
-
----
-
-<div align="center">
-
-Desarrollado por **[iamEscri](https://github.com/iamEscri)**
-
-⭐ Si este proyecto te resulta útil, considera darle una estrella
-
-</div>
+Proyecto independiente: estas organizaciones no avalan los pesos propios de VulnSOC.

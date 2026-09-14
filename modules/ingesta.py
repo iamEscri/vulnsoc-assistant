@@ -1,4 +1,8 @@
 import requests
+import os
+from datetime import datetime, timezone
+from modules.http_client import get_json
+from modules.evidencia import seleccionar_cvss, extraer_cpes, partes_cpe, numero
 from bs4 import BeautifulSoup
 
 NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
@@ -27,52 +31,15 @@ def obtener_datos_nvd(cve_id: str) -> dict:
         # --- CAMBIO 2: timeout 10 → 30 segundos ---
         # NVD puede tardar más de 10s en responder bajo carga.
         # Con 30s damos margen suficiente sin colgar la app indefinidamente.
-        response = requests.get(NVD_BASE_URL, params=params, headers=HEADERS, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        headers = {**HEADERS, **({"apiKey": os.environ["NVD_API_KEY"]} if os.getenv("NVD_API_KEY") else {})}
+        data = get_json(NVD_BASE_URL, params=params, headers=headers, timeout=30)
 
         if data["totalResults"] == 0:
             return {"error": f"CVE {cve_id} no encontrado en NVD"}
 
         cve = data["vulnerabilities"][0]["cve"]
 
-        # Extraer CVSS score y vector completo
-        cvss_score = None
-        cvss_version = None
-        vector_ataque = {}
-
-        metrics = cve.get("metrics", {})
-        if "cvssMetricV31" in metrics:
-            m = metrics["cvssMetricV31"][0]
-            cvss_score = m["cvssData"]["baseScore"]
-            cvss_version = "3.1"
-            vector_ataque = {
-                "attackVector":       m["cvssData"].get("attackVector", ""),
-                "attackComplexity":   m["cvssData"].get("attackComplexity", ""),
-                "privilegesRequired": m["cvssData"].get("privilegesRequired", ""),
-                "userInteraction":    m["cvssData"].get("userInteraction", ""),
-            }
-        elif "cvssMetricV30" in metrics:
-            m = metrics["cvssMetricV30"][0]
-            cvss_score = m["cvssData"]["baseScore"]
-            cvss_version = "3.0"
-            vector_ataque = {
-                "attackVector":       m["cvssData"].get("attackVector", ""),
-                "attackComplexity":   m["cvssData"].get("attackComplexity", ""),
-                "privilegesRequired": m["cvssData"].get("privilegesRequired", ""),
-                "userInteraction":    m["cvssData"].get("userInteraction", ""),
-            }
-        elif "cvssMetricV2" in metrics:
-            m = metrics["cvssMetricV2"][0]
-            cvss_score = m["cvssData"]["baseScore"]
-            cvss_version = "2.0"
-            vector_ataque = {
-                "attackVector":       m["cvssData"].get("accessVector", ""),
-                "attackComplexity":   m["cvssData"].get("accessComplexity", ""),
-                "privilegesRequired": m["cvssData"].get("authentication", ""),
-                "userInteraction":    "N/A (CVSS v2)",
-            }
-
+        cvss = seleccionar_cvss(cve.get('metrics', {}))
         # Extraer CWE (tipo de vulnerabilidad)
         cwes = []
         for weakness in cve.get("weaknesses", []):
@@ -93,23 +60,15 @@ def obtener_datos_nvd(cve_id: str) -> dict:
         # no descartar plugins/themes cuando el inventario tiene la plataforma base.
         productos_afectados = []
         plataformas_afectadas = []
-        for config in cve.get("configurations", []):
-            for node in config.get("nodes", []):
-                for match in node.get("cpeMatch", []):
-                    if match.get("vulnerable", False):
-                        criteria = match.get("criteria", "")
-                        partes = criteria.split(":")
-                        if len(partes) >= 5:
-                            vendor  = partes[3].replace("_", " ")
-                            producto = partes[4].replace("_", " ")
-                            entrada = f"{vendor} {producto}".strip()
-                            if entrada and entrada not in productos_afectados:
-                                productos_afectados.append(entrada)
-                        if len(partes) >= 11:
-                            target_sw = partes[10].replace("_", " ").strip()
-                            if target_sw and target_sw not in ("*", "-") \
-                                    and target_sw not in plataformas_afectadas:
-                                plataformas_afectadas.append(target_sw)
+        cpes = extraer_cpes(cve.get("configurations", []))
+        for match in cpes:
+            partes = partes_cpe(match['criteria'])
+            entrada = f"{partes[3]} {partes[4]}".replace('_', ' ')
+            if entrada not in productos_afectados:
+                productos_afectados.append(entrada)
+            target = partes[10].replace('_', ' ')
+            if target not in ('*', '-') and target not in plataformas_afectadas:
+                plataformas_afectadas.append(target)
 
         # Referencias completas con sus etiquetas (patch, vendor advisory, etc.)
         referencias_completas = []
@@ -125,14 +84,15 @@ def obtener_datos_nvd(cve_id: str) -> dict:
             r["url"] for r in referencias_completas
             if tags_parche.intersection(set(r["tags"]))
         ]
-        parche_disponible = len(refs_parche) > 0
+        parche_disponible = any("Patch" in r["tags"] for r in referencias_completas)
 
         return {
             "cve_id": cve_id,
             "descripcion": descripcion,
-            "cvss_score": cvss_score,
-            "cvss_version": cvss_version,
-            "vector_ataque": vector_ataque,
+            **cvss,
+            "cpe_afectados": cpes,
+            "estado_nvd": cve.get("vulnStatus", ""),
+            "consultado_en": datetime.now(timezone.utc).isoformat(),
             "cwes": cwes,
             "fecha_publicacion": cve.get("published", ""),
             "fecha_modificacion": cve.get("lastModified", ""),
@@ -149,7 +109,7 @@ def obtener_datos_nvd(cve_id: str) -> dict:
         # era confuso. Ahora muestra un mensaje claro y accionable.
         return {"error": "NVD tardó demasiado en responder. Inténtalo de nuevo en unos segundos."}
 
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, ValueError, KeyError, TypeError) as e:
         return {"error": f"Error al conectar con NVD: {str(e)}"}
 
 
@@ -157,23 +117,24 @@ def comprobar_cisa_kev(cve_id: str) -> dict:
     """Comprueba si el CVE esta en el catalogo CISA KEV."""
     try:
         # --- CAMBIO 4: headers añadidos a CISA KEV ---
-        response = requests.get(CISA_KEV_URL, headers=HEADERS, timeout=15)
-        response.raise_for_status()
-        data = response.json()
+        data = get_json(CISA_KEV_URL, headers=HEADERS, timeout=15)
+        if not isinstance(data.get("vulnerabilities"), list):
+            raise ValueError("Formato KEV inválido")
 
         for vuln in data.get("vulnerabilities", []):
             if vuln.get("cveID") == cve_id:
                 return {
                     "en_kev": True,
+                    "consultado_en": datetime.now(timezone.utc).isoformat(),
                     "nombre": vuln.get("vulnerabilityName", ""),
                     "fecha_añadido": vuln.get("dateAdded", ""),
                     "accion_requerida": vuln.get("requiredAction", ""),
                     "fecha_limite": vuln.get("dueDate", "")
                 }
 
-        return {"en_kev": False}
+        return {"en_kev": False, "consultado_en": datetime.now(timezone.utc).isoformat()}
 
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, ValueError, KeyError, TypeError) as e:
         return {"error": f"Error al conectar con CISA KEV: {str(e)}"}
 
 
@@ -181,21 +142,20 @@ def obtener_epss(cve_id: str) -> dict:
     """Consulta la API de EPSS para obtener la probabilidad de explotacion."""
     try:
         # --- CAMBIO 5: timeout 10 → 20 segundos + headers ---
-        response = requests.get(EPSS_URL, params={"cve": cve_id}, headers=HEADERS, timeout=20)
-        response.raise_for_status()
-        data = response.json()
+        data = get_json(EPSS_URL, params={"cve": cve_id}, headers=HEADERS, timeout=20)
 
         if data.get("data"):
             epss = data["data"][0]
-            return {
-                "epss_score": float(epss.get("epss", 0)),
-                "percentil": float(epss.get("percentile", 0))
-            }
+            probability = float(epss['epss'])
+            percentile = float(epss['percentile'])
+            if not numero(probability, 0, 1) or not numero(percentile, 0, 1):
+                raise ValueError('EPSS fuera de rango')
+            return {"epss_score": probability, "percentil": percentile, "fecha": epss.get('date'), "estado": "disponible", "consultado_en": datetime.now(timezone.utc).isoformat()}
 
-        return {"epss_score": 0.0, "percentil": 0.0}
+        return {"epss_score": None, "percentil": None, "estado": "sin_datos"}
 
-    except requests.exceptions.RequestException as e:
-        return {"epss_score": 0.0, "percentil": 0.0, "error": str(e)}
+    except (requests.exceptions.RequestException, ValueError, KeyError, TypeError) as e:
+        return {"epss_score": None, "percentil": None, "estado": "no_disponible", "error": "EPSS no está disponible o ha devuelto datos inválidos."}
 
 
 def analizar_cve(cve_id: str) -> dict:
@@ -229,9 +189,8 @@ def buscar_cves_por_descripcion(termino: str, max_resultados: int = 20) -> dict:
         }
 
         # --- CAMBIO 6: timeout 15 → 30 segundos + headers ---
-        response = requests.get(NVD_BASE_URL, params=params, headers=HEADERS, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        headers = {**HEADERS, **({"apiKey": os.environ["NVD_API_KEY"]} if os.getenv("NVD_API_KEY") else {})}
+        data = get_json(NVD_BASE_URL, params=params, headers=headers, timeout=30)
 
         total = data.get("totalResults", 0)
         vulnerabilidades = data.get("vulnerabilities", [])
@@ -240,16 +199,7 @@ def buscar_cves_por_descripcion(termino: str, max_resultados: int = 20) -> dict:
         for vuln in vulnerabilidades:
             cve = vuln["cve"]
 
-            # CVSS score
-            cvss_score = None
-            metrics = cve.get("metrics", {})
-            if "cvssMetricV31" in metrics:
-                cvss_score = metrics["cvssMetricV31"][0]["cvssData"]["baseScore"]
-            elif "cvssMetricV30" in metrics:
-                cvss_score = metrics["cvssMetricV30"][0]["cvssData"]["baseScore"]
-            elif "cvssMetricV2" in metrics:
-                cvss_score = metrics["cvssMetricV2"][0]["cvssData"]["baseScore"]
-
+            cvss = seleccionar_cvss(cve.get('metrics', {}))
             # Descripcion en ingles
             descripcion = ""
             for desc in cve.get("descriptions", []):
@@ -260,7 +210,7 @@ def buscar_cves_por_descripcion(termino: str, max_resultados: int = 20) -> dict:
             cves.append({
                 "cve_id": cve["id"],
                 "descripcion": descripcion,
-                "cvss_score": cvss_score or "N/A",
+                "cvss_score": cvss["cvss_score"],
                 "fecha_publicacion": cve.get("published", ""),
             })
 
@@ -272,5 +222,5 @@ def buscar_cves_por_descripcion(termino: str, max_resultados: int = 20) -> dict:
     except requests.exceptions.Timeout:
         return {"error": "NVD tardó demasiado en responder. Inténtalo de nuevo.", "cves": []}
 
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, ValueError, KeyError, TypeError) as e:
         return {"error": f"Error al buscar en NVD: {str(e)}", "cves": []}

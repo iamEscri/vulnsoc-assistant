@@ -1,0 +1,167 @@
+[
+  {
+    "title": "EPSS bajo: por qué suma cero",
+    "description": "CVSS 7,2, sin KEV y EPSS 0,50 %. No alcanza el primer umbral del 1 %. Sin ajuste por activos.",
+    "cvss": 7.2,
+    "kev": false,
+    "epss": 0.005,
+    "context": false,
+    "points": 72,
+    "priority": "MEDIA",
+    "equation": "72 CVSS + 0 KEV + 0 EPSS = 72",
+    "steps": [
+      {
+        "title": "Severidad técnica",
+        "points": 72,
+        "reason": "CVSS 7,2 × 10 = 72. Esta es la base del análisis."
+      },
+      {
+        "title": "Sin explotación documentada en KEV",
+        "points": 0,
+        "reason": "En este escenario la consulta confirma que no está incluida. No se aplica la bonificación de +60."
+      },
+      {
+        "title": "EPSS por debajo del primer umbral",
+        "points": 0,
+        "reason": "0,50 % es menor que 1 %. La predicción sigue siendo informativa, aunque este tramo no aporte puntos."
+      },
+      {
+        "title": "Sin contexto adicional",
+        "points": 0,
+        "reason": "No se aplica ajuste de inventario. No supone que tus activos estén protegidos."
+      }
+    ],
+    "takeaway": "72 está entre 55 y 89: prioridad media. EPSS no suma por su valor bajo, no por precedencia de KEV."
+  },
+  {
+    "title": "Predicción elevada, sin KEV",
+    "description": "CVSS 9,8, sin KEV y EPSS 80 %. Solo se aplica el tramo EPSS de +30, sin acumular los anteriores.",
+    "cvss": 9.8,
+    "kev": false,
+    "epss": 0.8,
+    "context": false,
+    "points": 128,
+    "priority": "ALTA",
+    "equation": "98 CVSS + 30 EPSS = 128",
+    "steps": [
+      {
+        "title": "Severidad técnica",
+        "points": 98,
+        "reason": "CVSS 9,8 × 10 = 98. La severidad técnica es muy elevada."
+      },
+      {
+        "title": "Predicción sin KEV confirmado",
+        "points": 30,
+        "reason": "EPSS 80 % supera el umbral del 70 %. Se aplica únicamente +30; no se suman también +10 y +20."
+      },
+      {
+        "title": "Sin ajuste por activos",
+        "points": 0,
+        "reason": "No hay un contexto de activo compatible que eleve esta puntuación."
+      }
+    ],
+    "takeaway": "128 está entre 90 y 129: prioridad alta. Está cerca del umbral crítico; la etiqueta no representa una diferencia brusca de riesgo."
+  },
+  {
+    "title": "Log4Shell: KEV tiene precedencia",
+    "description": "Ejemplo con CVSS 10, KEV confirmado y EPSS 99,999 %. EPSS sigue visible, pero KEV aporta la bonificación de explotación.",
+    "cvss": 10,
+    "kev": true,
+    "epss": 0.99999,
+    "context": false,
+    "points": 160,
+    "priority": "CRÍTICA",
+    "equation": "100 CVSS + 60 KEV + 0 EPSS = 160",
+    "steps": [
+      {
+        "title": "Severidad técnica",
+        "points": 100,
+        "reason": "CVSS 10 × 10 = 100 puntos de base."
+      },
+      {
+        "title": "Explotación documentada",
+        "points": 60,
+        "reason": "La inclusión en KEV aporta +60, sin afirmar que tus activos estén comprometidos."
+      },
+      {
+        "title": "EPSS permanece informativo",
+        "points": 0,
+        "reason": "Aunque EPSS es muy alto, KEV tiene precedencia. No añadimos otra bonificación por predicción."
+      },
+      {
+        "title": "Sin ajuste por activos",
+        "points": 0,
+        "reason": "Este ejemplo no incluye contexto de inventario."
+      }
+    ],
+    "takeaway": "160 supera el umbral de 130: prioridad crítica. La aplicabilidad a tu entorno debe verificarse por separado."
+  },
+  {
+    "title": "El activo eleva la prioridad",
+    "description": "CVSS 9,8, sin KEV y EPSS 0,50 %. Un activo con versión compatible, criticidad alta y exposición a Internet añade 35 puntos.",
+    "cvss": 9.8,
+    "kev": false,
+    "epss": 0.005,
+    "context": true,
+    "points": 133,
+    "priority": "CRÍTICA",
+    "equation": "98 CVSS + 0 EPSS + (5 + 15 + 15) activo = 133",
+    "steps": [
+      {
+        "title": "Severidad técnica",
+        "points": 98,
+        "reason": "CVSS 9,8 aporta 98 puntos. Sin KEV y con EPSS 0,50 %, la explotación no añade puntos."
+      },
+      {
+        "title": "Producto y versión compatibles",
+        "points": 5,
+        "reason": "El activo encaja en un criterio de versión publicado que puede comprobarse."
+      },
+      {
+        "title": "Criticidad alta del mismo activo",
+        "points": 15,
+        "reason": "La importancia declarada del activo para el entorno añade +15."
+      },
+      {
+        "title": "Exposición a Internet del mismo activo",
+        "points": 15,
+        "reason": "La exposición declarada añade +15. No es el resultado de un escaneo."
+      }
+    ],
+    "takeaway": "El contexto eleva el resultado de 98 (alta) a 133 (crítica). Las tres aportaciones pertenecen a un único activo, sin sumar ni mezclar varios."
+  },
+  {
+    "title": "KEV con severidad desconocida",
+    "description": "No hay CVSS, pero sí explotación documentada. El mínimo operativo eleva la puntuación a 90; el resultado sigue siendo provisional por falta de severidad.",
+    "cvss": null,
+    "kev": true,
+    "epss": 0.005,
+    "context": false,
+    "points": 90,
+    "priority": "ALTA",
+    "equation": "0 CVSS desconocido + 60 KEV + 30 ajuste mínimo = 90",
+    "steps": [
+      {
+        "title": "Severidad desconocida",
+        "points": 0,
+        "reason": "No hay CVSS utilizable. Se conserva el factor sin puntos, pero no se interpreta como severidad cero."
+      },
+      {
+        "title": "Explotación documentada",
+        "points": 60,
+        "reason": "KEV aporta +60 incluso cuando falta severidad."
+      },
+      {
+        "title": "Mínimo operativo de prioridad alta",
+        "points": 30,
+        "reason": "60 todavía no llega a 90. El motor añade la diferencia: 90 − 60 = 30."
+      },
+      {
+        "title": "EPSS informativo y sin ajuste de activos",
+        "points": 0,
+        "reason": "KEV tiene precedencia y no hay contexto adicional. La falta de CVSS mantiene el resultado provisional."
+      }
+    ],
+    "takeaway": "90 corresponde a prioridad alta. La evidencia de explotación impide dejarla en baja, pero falta completar la severidad."
+  }
+]

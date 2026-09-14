@@ -1,0 +1,41 @@
+/* Main working views only; the methodology page and embedded guide keep their typography. */
+main:not(.methodology-main) :is(.entry-copy p,.page-heading p,.body-copy,.generated-text,.search-result p,.analysis-assessment p,.asset-card p,.related-asset p):not(.scoring-guide *) { font-size: 16px; line-height: 1.8; }
+main:not(.methodology-main) :is(.entry-form>label,.field,.metric>div,.signal-grid h3,.workflow b,.tabs button,.segmented button,.analysis-assessment b):not(.scoring-guide *) { font-size: 16px; }
+main:not(.methodology-main) :is(.btn,.entry-input>button,.text-link,.filter input,.filter select,.field input,.field select,.field textarea,.entry-input input):not(.scoring-guide *) { font-size: 15px; }
+main:not(.methodology-main) :is(.help,.panel-heading p,.metric small,.signal-grid article>p,.workflow small,.detail-meta,.detail-context,.example-context p,.score-hint,.score-verdict>p,.factor-explanation,.analysis-assessment span):not(.scoring-guide *) { font-size: 14px; line-height: 1.75; }
+main:not(.methodology-main) :is(.entry-examples,.entry-examples button,.signals-intro>span,.signal-grid article>span,.flow-note,.flow-note small,.eyebrow,.score-axis,.waterfall-heading):not(.scoring-guide *) { font-size: 12px; }
+main:not(.methodology-main) :is(.panel-heading h2,.signals-intro h2,.asset-card h3):not(.scoring-guide *) { font-size: 19px; }
+main:not(.methodology-main) :is(.factor-name,.accumulated-value):not(.scoring-guide *) { font-size: 16px; }
+main:not(.methodology-main) :is(.factor-name small,.badge,.threshold-legend>span,.threshold-legend b):not(.scoring-guide *) { font-size: 13px; }
+main:not(.methodology-main) .table-scroll :is(td,.text-link.mono) { font-size: 15px; }
+main:not(.methodology-main) .table-scroll :is(th,small) { font-size: 13px; }
+main:not(.methodology-main) .table-scroll td { padding-block: 18px; }
+main:not(.methodology-main) .filter select { width: auto; max-width: 100%; }
+main:not(.methodology-main) .filter input { max-width: 100%; }
+main:not(.methodology-main) .table-tools { flex-wrap: wrap; }
+.app:has(main:not(.methodology-main)) .masthead nav button { font-size: 15px; }
+.modal :is(.field,.field input,.field select,.field textarea) { font-size: 16px; }
+.modal .help { font-size: 14px; line-height: 1.7; }
+@media(max-width:1100px) {
+ .app:has(main:not(.methodology-main)) .masthead nav button { font-size: 14px; padding-inline: 10px; }
+}
+@media(max-width:750px) {
+ main:not(.methodology-main) .entry-examples { flex-wrap: wrap; }
+ main:not(.methodology-main) .tabs { overflow-x: auto; }
+ main:not(.methodology-main) .tabs button { white-space: nowrap; font-size: 14px; }
+ main:not(.methodology-main) .score-verdict { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+ main:not(.methodology-main) .score-verdict>.threshold-legend { grid-column: 1/-1; grid-row: 6; margin-top: 18px; }
+ main:not(.methodology-main) .score-verdict>p { grid-column: 1/-1; grid-row: 5; margin-top: 18px; }
+ main:not(.methodology-main) .field :is(input,select,textarea) { font-size: 16px; }
+ main:not(.methodology-main) .flow-mobile small { font-size: 12px; }
+ main:not(.methodology-main) .entry-input { gap: 8px; }
+ main:not(.methodology-main) .entry-input input { font-size: 14px; }
+ main:not(.methodology-main) .entry-input>button { padding-inline: 10px; font-size: 14px; }
+ main:not(.methodology-main) .entry-input>svg { width: 17px; }
+}
+@media(max-width:750px) {
+ main:not(.methodology-main) .analysis-entry { grid-template-columns: minmax(0,1fr); }
+ main:not(.methodology-main) .entry-copy { min-width: 0; }
+ main:not(.methodology-main) .entry-input input { width: 0; flex: 1 1 0; }
+ main:not(.methodology-main) .entry-copy .eyebrow { white-space: normal; }
+}

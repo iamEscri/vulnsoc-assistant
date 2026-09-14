@@ -1,309 +1,105 @@
-from datetime import datetime
+"""VulnSOC methodology 2.0: explicit policy, not calibrated risk probability."""
+import re
+from datetime import datetime, timezone
+from modules.evidencia import numero
 
-# Mapeo de CWEs a tipos de vulnerabilidad y puntuacion
-CWE_SCORING = {
-    # RCE - Ejecucion remota de codigo
-    "CWE-78":  ("RCE",     25),  # OS Command Injection
-    "CWE-94":  ("RCE",     25),  # Code Injection
-    "CWE-502": ("RCE",     25),  # Deserialization
-    "CWE-77":  ("RCE",     25),  # Command Injection
-    # Escalada de privilegios
-    "CWE-269": ("PrivEsc", 18),  # Improper Privilege Management
-    "CWE-732": ("PrivEsc", 18),  # Incorrect Permission Assignment
-    "CWE-284": ("PrivEsc", 18),  # Improper Access Control
-    # Inyeccion SQL
-    "CWE-89":  ("SQLi",    15),  # SQL Injection
-    # XSS
-    "CWE-79":  ("XSS",     10),  # Cross-site Scripting
-    # Path Traversal
-    "CWE-22":  ("PathTrav",12),  # Path Traversal
-    # DoS
-    "CWE-400": ("DoS",      8),  # Resource Exhaustion
-    "CWE-20":  ("DoS",      8),  # Improper Input Validation
+VERSION = '2.0'
+THRESHOLDS = {'MEDIA': 55, 'ALTA': 90, 'CRÍTICA': 130}
+ACTIONS = {
+    'CRÍTICA': 'Revisar con urgencia la aplicabilidad y priorizar mitigación o parche.',
+    'ALTA': 'Revisar la aplicabilidad y planificar la remediación con prioridad.',
+    'MEDIA': 'Evaluar en el ciclo de gestión y seguir nuevas evidencias.',
+    'BAJA': 'Mantener seguimiento; baja prioridad no implica ausencia de riesgo.',
+    'SIN DETERMINAR': 'Completar la información antes de asignar una prioridad definitiva.',
 }
 
 
-def _detectar_tipo_vulnerabilidad(cwes: list, descripcion: str) -> tuple:
-    """
-    Detecta el tipo de vulnerabilidad y su puntuacion.
-    Primero busca en CWEs oficiales, luego en la descripcion como fallback.
-    """
-    # Buscar en CWEs oficiales
-    mejor_tipo = None
-    mejor_puntos = 0
-
+def _detectar_tipo_vulnerabilidad(cwes, descripcion):
+    # CWE describes a weakness; deserialization/access control are not proof of RCE.
+    mapping = {'CWE-78': 'Inyección de comandos', 'CWE-77': 'Inyección de comandos', 'CWE-94': 'Inyección de código', 'CWE-502': 'Deserialización', 'CWE-269': 'Gestión de privilegios', 'CWE-732': 'Permisos incorrectos', 'CWE-284': 'Control de acceso', 'CWE-89': 'SQLi', 'CWE-79': 'XSS', 'CWE-22': 'Path traversal', 'CWE-400': 'Consumo de recursos', 'CWE-20': 'Validación de entrada'}
     for cwe in cwes:
-        if cwe in CWE_SCORING:
-            tipo, puntos = CWE_SCORING[cwe]
-            if puntos > mejor_puntos:
-                mejor_tipo = tipo
-                mejor_puntos = puntos
-
-    if mejor_tipo:
-        return mejor_tipo, mejor_puntos
-
-    # Fallback: buscar en la descripcion
-    desc_lower = descripcion.lower()
-    if any(t in desc_lower for t in ["remote code execution", "arbitrary code", "rce"]):
-        return "RCE", 25
-    if any(t in desc_lower for t in ["privilege escalation", "escalation of privilege", "system privileges"]):
-        return "PrivEsc", 18
-    if "sql injection" in desc_lower:
-        return "SQLi", 15
-    if "cross-site scripting" in desc_lower or "xss" in desc_lower:
-        return "XSS", 10
-    if any(t in desc_lower for t in ["denial of service", "dos", "crash"]):
-        return "DoS", 8
-
-    return "Desconocido", 0
+        if cwe in mapping:
+            return mapping[cwe], 0
+    patterns = [('RCE (inferido)', r'\b(remote code execution|arbitrary code execution|rce)\b'), ('PrivEsc (inferido)', r'\b(privilege escalation|escalation of privilege)\b'), ('SQLi (inferido)', r'\bsql injection\b'), ('XSS (inferido)', r'\b(cross[- ]site scripting|xss)\b'), ('DoS (inferido)', r'\b(denial of service|dos)\b')]
+    for label, pattern in patterns:
+        if re.search(pattern, descripcion, re.I):
+            return label, 0
+    return 'Desconocido', 0
 
 
-def calcular_score(datos_nvd: dict, datos_kev: dict, datos_epss: dict = None) -> dict:
-    """
-    Motor de scoring propio para priorizacion de vulnerabilidades.
+def _finalize(score):
+    points = sum(f['puntos'] for f in score['factores'])
+    if score['calidad_datos']['cvss'] != 'disponible' and not score['kev_confirmado']:
+        priority = 'SIN DETERMINAR'
+    else:
+        priority = next((p for p in ['CRÍTICA', 'ALTA', 'MEDIA'] if points >= THRESHOLDS[p]), 'BAJA')
+    return {**score, 'score_interno': points, 'score_mostrado': min(points, 100), 'prioridad': priority, 'accion_recomendada': ACTIONS[priority], 'provisional': bool(score['advertencias'])}
 
-    Factores:
-    1. CVSS base          (0-100)
-    2. CISA KEV           (+30)
-    3. Reciente < 30 dias (+20)
-    4. EPSS               (+25 si >0.7 / +10 si >0.3)
-    5. Tipo vulnerabilidad (+8 a +25 segun CWE/descripcion)
-    6. Vector de ataque   (+15 red / +10 sin auth / +10 sin interaccion / +10 baja complejidad)
 
-    Diseno:
-    - score_interno: puntuacion real sin limite, para ordenar CVEs
-    - score_mostrado: capado a 100, estable y comparable con CVSS
-    - prioridad: derivada de score_mostrado con umbrales fijos
-    """
-
-    if "error" in datos_nvd:
-        return {"error": datos_nvd["error"], "score_interno": 0, "score_mostrado": 0}
-
-    if datos_epss is None:
-        datos_epss = {}
-
-    puntuacion = 0
-    factores = []
-
-    # ── FACTOR 1: CVSS base ───────────────────────────────────────────────────
-    cvss = datos_nvd.get("cvss_score")
-    if cvss is not None:
-        puntos_cvss = round(cvss * 10)
-        puntuacion += puntos_cvss
-        factores.append({
-            "factor": "CVSS base",
-            "puntos": puntos_cvss,
-            "detalle": f"CVSS {datos_nvd.get('cvss_version')} = {cvss}"
-        })
-
-    # ── FACTOR 2: CISA KEV ────────────────────────────────────────────────────
-    if datos_kev.get("en_kev"):
-        puntuacion += 30
-        factores.append({
-            "factor": "En CISA KEV",
-            "puntos": 30,
-            "detalle": f"Explotacion activa confirmada desde {datos_kev.get('fecha_añadido')}"
-        })
-
-    # ── FACTOR 3: Recencia ────────────────────────────────────────────────────
-    fecha_pub = datos_nvd.get("fecha_publicacion", "")
-    if fecha_pub:
+def calcular_score(datos_nvd, datos_kev, datos_epss=None):
+    epss = datos_epss or {}
+    cvss = datos_nvd.get('cvss_score')
+    cvss_ok = not datos_nvd.get('error') and numero(cvss, 0, 10)
+    kev_ok = not datos_kev.get('error') and isinstance(datos_kev.get('en_kev'), bool)
+    kev = kev_ok and datos_kev['en_kev']
+    probability = epss.get('epss_score')
+    epss_ok = not epss.get('error') and numero(probability, 0, 1)
+    warnings = []
+    factors = []
+    def add(name, points, detail):
+        factors.append({'factor': name, 'puntos': points, 'detalle': detail})
+    if cvss_ok:
+        add('Severidad CVSS', round(cvss * 10), f"CVSS {datos_nvd.get('cvss_version', '')}: {cvss}/10. Vector y CWE no reciben puntos adicionales.")
+    else:
+        warnings.append('CVSS no disponible: faltan datos de severidad. No equivale a severidad cero.')
+        add('CVSS desconocido', 0, 'No se puede estimar la severidad a partir de los datos disponibles.')
+    if kev:
+        add('Explotación documentada · KEV', 60, f"Inclusión en CISA KEV desde {datos_kev.get('fecha_añadido', 'fecha no disponible')}. No prueba explotación de tus activos.")
+        if sum(f['puntos'] for f in factors) < 90:
+            add('Mínimo operativo por KEV', 90-sum(f['puntos'] for f in factors), 'Política VulnSOC: una explotación documentada requiere al menos prioridad alta, incluso con severidad incompleta.')
+    elif not kev_ok:
+        warnings.append('CISA KEV no verificado: no se puede descartar explotación documentada.')
+        add('KEV sin verificar', 0, 'Fuente no disponible o respuesta incompleta; no se interpreta como ausencia del catálogo.')
+    else:
+        add('No incluida en KEV', 0, 'No listada en la consulta; no significa que no exista explotación.')
+    if epss_ok:
+        points = 0 if kev else 30 if probability >= .7 else 20 if probability >= .1 else 10 if probability >= .01 else 0
+        add('EPSS · señal predictiva', points, f"Probabilidad {probability:.2%} a 30 días." + (' KEV tiene precedencia; EPSS no suma otra bonificación.' if kev else ' Política: ≥1% +10; ≥10% +20; ≥70% +30. No es una probabilidad de riesgo del activo.'))
+    else:
+        warnings.append('EPSS sin datos: probabilidad desconocida, no 0%.')
+        add('EPSS desconocido', 0, 'No existe un dato utilizable para esta consulta.')
+    published = datos_nvd.get('fecha_publicacion')
+    if published:
         try:
-            fecha = datetime.fromisoformat(fecha_pub)
-            dias = (datetime.now(fecha.tzinfo) - fecha).days
-            if dias < 30:
-                puntuacion += 20
-                factores.append({
-                    "factor": "Vulnerabilidad reciente",
-                    "puntos": 20,
-                    "detalle": f"Publicada hace {dias} dias — ventana de parche abierta"
-                })
-        except ValueError:
-            pass
-
-    # ── FACTOR 4: EPSS ────────────────────────────────────────────────────────
-    epss_score = datos_epss.get("epss_score", 0.0)
-    if epss_score > 0.7:
-        puntuacion += 25
-        factores.append({
-            "factor": "EPSS alto",
-            "puntos": 25,
-            "detalle": f"Probabilidad de explotacion: {epss_score:.1%} (top {100 - round(datos_epss.get('percentil', 0) * 100)}%)"
-        })
-    elif epss_score > 0.3:
-        puntuacion += 10
-        factores.append({
-            "factor": "EPSS moderado",
-            "puntos": 10,
-            "detalle": f"Probabilidad de explotacion: {epss_score:.1%}"
-        })
-
-    # ── FACTOR 5: Tipo de vulnerabilidad ─────────────────────────────────────
-    cwes = datos_nvd.get("cwes", [])
-    descripcion = datos_nvd.get("descripcion", "")
-    tipo_vuln, puntos_tipo = _detectar_tipo_vulnerabilidad(cwes, descripcion)
-
-    if puntos_tipo > 0:
-        puntuacion += puntos_tipo
-        factores.append({
-            "factor": f"Tipo: {tipo_vuln}",
-            "puntos": puntos_tipo,
-            "detalle": f"CWEs: {', '.join(cwes) if cwes else 'detectado en descripcion'}"
-        })
-
-    # ── FACTOR 6: Vector de ataque ────────────────────────────────────────────
-    vector = datos_nvd.get("vector_ataque", {})
-
-    if vector.get("attackVector") == "NETWORK":
-        puntuacion += 15
-        factores.append({
-            "factor": "Vector: red",
-            "puntos": 15,
-            "detalle": "Explotable remotamente sin acceso fisico"
-        })
-
-    if vector.get("privilegesRequired") == "NONE":
-        puntuacion += 10
-        factores.append({
-            "factor": "Sin autenticacion",
-            "puntos": 10,
-            "detalle": "No requiere credenciales para explotar"
-        })
-
-    if vector.get("userInteraction") == "NONE":
-        puntuacion += 10
-        factores.append({
-            "factor": "Sin interaccion usuario",
-            "puntos": 10,
-            "detalle": "No requiere que la victima haga ninguna accion"
-        })
-
-    if vector.get("attackComplexity") == "LOW":
-        puntuacion += 10
-        factores.append({
-            "factor": "Baja complejidad",
-            "puntos": 10,
-            "detalle": "No requiere condiciones especiales para explotar"
-        })
-
-    # ── Score final ───────────────────────────────────────────────────────────
-    score_interno = round(puntuacion)
-    score_mostrado = min(score_interno, 100)
-
-    if score_interno >= 130:
-        prioridad = "CRÍTICA"
-    elif score_interno >= 90:
-        prioridad = "ALTA"
-    elif score_interno >= 55:
-        prioridad = "MEDIA"
-    else:
-        prioridad = "BAJA"
-
-    return {
-        "score_interno": score_interno,
-        "score_mostrado": score_mostrado,
-        "score_cvss_puro": round(cvss * 10) if cvss else 0,
-        "prioridad": prioridad,
-        "tipo_vulnerabilidad": tipo_vuln,
-        "epss_score": epss_score,
-        "factores": factores
-    }
+            date = datetime.fromisoformat(published.replace('Z', '+00:00'))
+            if date.tzinfo is None:
+                date = date.replace(tzinfo=timezone.utc)
+            if date > datetime.now(timezone.utc):
+                warnings.append('Fecha de publicación futura: revisar el dato de origen.')
+        except (ValueError, TypeError):
+            warnings.append('Fecha de publicación inválida: revisar el dato de origen.')
+    score = {'metodologia_version': VERSION, 'umbrales': THRESHOLDS, 'factores': factors, 'advertencias': warnings, 'calidad_datos': {'cvss': 'disponible' if cvss_ok else 'desconocido', 'kev': 'disponible' if kev_ok else 'desconocido', 'epss': 'disponible' if epss_ok else 'desconocido'}, 'kev_confirmado': kev, 'score_cvss_puro': round(cvss*10) if cvss_ok else 0, 'epss_score': probability if epss_ok else None, 'tipo_vulnerabilidad': _detectar_tipo_vulnerabilidad(datos_nvd.get('cwes', []), datos_nvd.get('descripcion', ''))[0], 'contexto_inventario': 'sin_inventario'}
+    return _finalize(score)
 
 
-def ajustar_por_inventario(score: dict, inventario: dict, productos_afectados: list,
-                           plataformas_afectadas: list = None) -> dict:
-    """
-    Ajusta el score segun si el CVE afecta al inventario de la empresa.
-
-    Estados (no confundir "ausencia de dato" con "ausencia confirmada"):
-    - Inventario no configurado          : sin cambio
-    - Sin productos afectados (no CPE)    : sin cambio (no verificable)
-    - Producto coincide con inventario    : +10 pts
-    - Plataforma (target_sw) coincide pero
-      el producto no (p.ej. plugin sobre
-      una plataforma que si tienes)       : sin cambio (componente no confirmado)
-    - Nada coincide                       : -25 pts
-
-    Recalcula score_interno, score_mostrado y prioridad con los umbrales
-    basados en score_interno (130 / 90 / 55).
-    """
-    from modules.inventario import tecnologias_inventario
-
-    plataformas_afectadas = plataformas_afectadas or []
-    tecnologias_empresa = tecnologias_inventario(inventario)
-
-    if not tecnologias_empresa:
+def ajustar_por_inventario(score, inventario, productos_afectados, plataformas_afectadas=None, cpe_afectados=None):
+    from modules.inventario import equipos_afectados, normalizar_inventario
+    if not normalizar_inventario(inventario).get('equipos'):
         return score
-
-    # Sin productos afectados (la NVD aun no ha enriquecido el CVE con CPEs):
-    # no podemos verificar el inventario. No penalizamos ausencia de dato.
-    if not productos_afectados:
-        factores = list(score["factores"])
-        factores.append({
-            "factor": "Inventario no verificable",
-            "puntos": 0,
-            "detalle": "Inventario no verificable — sin CPE publicado",
-        })
-        return {**score, "factores": factores}
-
-    coincidencias = []
-    for producto in productos_afectados:
-        palabras = set(producto.lower().split())
-        if palabras.intersection(tecnologias_empresa):
-            coincidencias.append(producto)
-
-    # Coincidencias a nivel de plataforma (target_sw): el componente concreto
-    # no esta en el inventario, pero la plataforma sobre la que corre si — caso
-    # tipico de un plugin/theme sobre WordPress, Drupal, etc.
-    coincidencias_plataforma = []
-    for plataforma in plataformas_afectadas:
-        palabras = set(plataforma.lower().split())
-        if palabras.intersection(tecnologias_empresa):
-            coincidencias_plataforma.append(plataforma)
-
-    factores = list(score["factores"])
-
-    if coincidencias:
-        ajuste = 10
-        factores.append({
-            "factor": "Confirmado en inventario",
-            "puntos": ajuste,
-            "detalle": f"Coincide con tu entorno: {', '.join(coincidencias[:3])}"
-        })
-    elif coincidencias_plataforma:
-        ajuste = 0
-        factores.append({
-            "factor": "Componente del ecosistema en tu inventario",
-            "puntos": ajuste,
-            "detalle": (
-                f"Corre sobre {', '.join(coincidencias_plataforma[:3])}, que si tienes. "
-                "No se puede confirmar el componente — revisalo manualmente"
-            )
-        })
+    assets = equipos_afectados(inventario, productos_afectados, plataformas_afectadas, cpe_afectados)
+    compatible = [a for a in assets if a['estado'] == 'version_compatible']
+    result = {**score, 'factores': list(score['factores']), 'advertencias': list(score['advertencias'])}
+    if not compatible:
+        state = 'pendiente_verificacion' if assets else 'sin_coincidencias'
+        result['contexto_inventario'] = state
+        result['factores'].append({'factor': 'Inventario · sin ajuste', 'puntos': 0, 'detalle': 'No se ha establecido compatibilidad de producto y versión. No se resta prioridad ni se declara el entorno seguro.'})
+        result['advertencias'].append('Aplicabilidad al inventario pendiente: verifica producto, versión y configuración.')
     else:
-        ajuste = -25
-        factores.append({
-            "factor": "No detectado en inventario",
-            "puntos": ajuste,
-            "detalle": "El CVE no coincide con las tecnologías registradas en tu entorno"
-        })
-
-    nuevo_interno = max(score["score_interno"] + ajuste, 0)
-    nuevo_mostrado = min(nuevo_interno, 100)
-
-    if nuevo_interno >= 130:
-        prioridad = "CRÍTICA"
-    elif nuevo_interno >= 90:
-        prioridad = "ALTA"
-    elif nuevo_interno >= 55:
-        prioridad = "MEDIA"
-    else:
-        prioridad = "BAJA"
-
-    return {
-        **score,
-        "score_interno": nuevo_interno,
-        "score_mostrado": nuevo_mostrado,
-        "prioridad": prioridad,
-        "factores": factores,
-    }
+        def contribution(asset):
+            return 5 + {'alta': 15, 'media': 5, 'baja': 0}.get(asset['criticidad'], 0) + (15 if asset['exposicion'] == 'internet' else 0)
+        asset = max(compatible, key=contribution)
+        result['contexto_inventario'] = 'version_compatible'
+        result['factores'].append({'factor': 'Contexto de activo compatible', 'puntos': contribution(asset), 'detalle': f"{asset['nombre']}: versión compatible +5; criticidad {asset['criticidad']} +{ {'alta':15,'media':5,'baja':0}.get(asset['criticidad'],0) }; exposición {asset['exposicion']} +{15 if asset['exposicion']=='internet' else 0}. Se usa un único activo, el de mayor contribución. Verificar configuración; no confirma compromiso."})
+        if asset['exposicion'] == 'desconocida':
+            result['advertencias'].append('Exposición del activo desconocida: no se ha asumido que sea interna.')
+    return _finalize(result)

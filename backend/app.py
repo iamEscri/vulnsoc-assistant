@@ -12,6 +12,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field, ConfigDict
 from modules.ingesta import analizar_cve, buscar_cves_por_descripcion, HEADERS, NVD_BASE_URL
 from modules.scoring import calcular_score, ajustar_por_inventario
+from modules.evidencia import seleccionar_cvss
 from modules.inventario import equipos_afectados, importar_inventario
 from modules.analisis_ia import generar_analisis, generar_regla_sigma
 from modules.exportar_pdf import generar_pdf
@@ -24,6 +25,7 @@ class Asset(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     ip: str = Field(default='', max_length=100)
     criticidad: str = Field(default='media', pattern='^(alta|media|baja)$')
+    exposicion: str = Field(default='desconocida', pattern='^(internet|interna|desconocida)$')
     tecnologias: list[Annotated[str, Field(max_length=200)]] = Field(default_factory=list, max_length=100)
 class Inventory(BaseModel):
     equipos: list[Asset] = Field(default_factory=list, max_length=500)
@@ -65,9 +67,11 @@ def health():
     return {'status':'ok', 'version':'2.0.0'}
 
 def sources(cve):
-    result = cached('sources:'+cve, 1800, lambda: analizar_cve(cve))
+    result = cached('sources:v2:'+cve, 1800, lambda: analizar_cve(cve))
     if 'error' in result['nvd']:
         raise HTTPException(502, result['nvd']['error'])
+    if result['nvd'].get('estado_nvd') == 'Rejected':
+        raise HTTPException(422, 'Este identificador está rechazado en NVD. Revisa su referencia oficial.')
     return result
 
 def ai_budget(request):
@@ -78,21 +82,23 @@ def ai_budget(request):
 def analyze(payload: AnalysisRequest, request: Request):
     result = sources(payload.cve_id)
     inv = payload.inventario.model_dump()
-    score = ajustar_por_inventario(calcular_score(result['nvd'], result['kev'], result['epss']), inv, result['nvd'].get('productos_afectados',[]), result['nvd'].get('plataformas_afectadas',[]))
+    score = ajustar_por_inventario(calcular_score(result['nvd'], result['kev'], result['epss']), inv, result['nvd'].get('productos_afectados',[]), result['nvd'].get('plataformas_afectadas',[]), result['nvd'].get('cpe_afectados',[]))
+    # Keep the legacy capped field inside the historical engine only.
+    score.pop('score_mostrado', None)
     analysis = {}
     if payload.ia:
         context = json.dumps([result, score], sort_keys=True)
-        key = 'ai:v2:'+hashlib.sha256(context.encode()).hexdigest()
+        key = 'ai:v4:'+hashlib.sha256(context.encode()).hexdigest()
         def generate():
             if not ai_budget(request):
                 return {'error':'Cuota de IA agotada. Los datos y la exportación siguen disponibles.'}
             return generar_analisis(result['nvd'], result['kev'], score)
         analysis = cached(key, 3600, generate)
     return {'cve_id':payload.cve_id, 'resultado':result, 'score':score, 'analisis':analysis,
-            'score_mostrado':score['score_mostrado'], 'score_interno':score['score_interno'],
+            'score_interno':score['score_interno'],
             'prioridad':score['prioridad'], 'tipo':score.get('tipo_vulnerabilidad','Desconocido'),
-            'en_kev':result['kev'].get('en_kev',False), 'epss_score':result['epss'].get('epss_score',0),
-            'equipos_afectados':equipos_afectados(inv, result['nvd'].get('productos_afectados',[]),result['nvd'].get('plataformas_afectadas',[])),
+            'en_kev':result['kev'].get('en_kev',False), 'epss_score':score['epss_score'],
+            'equipos_afectados':equipos_afectados(inv, result['nvd'].get('productos_afectados',[]),result['nvd'].get('plataformas_afectadas',[]), result['nvd'].get('cpe_afectados',[])),
             'fecha':datetime.now(timezone.utc).isoformat()}
 
 def upstream(url, params):
@@ -121,9 +127,7 @@ def search(payload: SearchRequest):
     data=upstream(NVD_BASE_URL,params)
     cves=[]
     for v in data.get('vulnerabilities',[]):
-        c=v['cve']; metrics=c.get('metrics',{}); cvss=None
-        for name in ['cvssMetricV40','cvssMetricV31','cvssMetricV30','cvssMetricV2']:
-            if metrics.get(name): cvss=metrics[name][0]['cvssData'].get('baseScore'); break
+        c=v['cve']; cvss=seleccionar_cvss(c.get('metrics', {}))['cvss_score']
         cves.append({'cve_id':c['id'],'descripcion':next((d['value'] for d in c.get('descriptions',[]) if d['lang']=='en'),''),'cvss_score':cvss,'fecha_publicacion':c.get('published','')})
     return {'total':data.get('totalResults',0),'cves':cves}
 
@@ -138,7 +142,7 @@ def sigma(payload: AnalysisRequest, request: Request):
     def generate():
         if not ai_budget(request): return {'error':'Cuota de IA agotada. Inténtalo más tarde.'}
         return generar_regla_sigma(result['nvd'],result['kev'])
-    return cached('sigma:'+payload.cve_id,3600,generate)
+    return cached('sigma:v2:'+payload.cve_id,3600,generate)
 
 @app.post('/api/report')
 def report(payload: ReportRequest):

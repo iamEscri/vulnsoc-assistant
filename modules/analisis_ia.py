@@ -21,13 +21,19 @@ def _get_openai_client():
 
 def _llamar_groq(prompt: str) -> str:
     client = _get_groq_client()
+    model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
     response = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
-        max_tokens=1024
+        max_completion_tokens=4096,
+        **({"reasoning_effort": "low"} if model.startswith("openai/gpt-oss") else {})
     )
-    return response.choices[0].message.content
+    choice = response.choices[0]
+    content = (choice.message.content or "").strip()
+    if not content or choice.finish_reason == "length":
+        raise ValueError("La IA no ha completado la respuesta. Vuelve a intentarlo.")
+    return content
 
 def _llamar_gemini(prompt: str) -> str:
     client = _get_gemini_client()
@@ -92,17 +98,22 @@ CVSS Score: {datos_nvd.get('cvss_score', 'No disponible')} (version {datos_nvd.g
 Fecha publicacion: {datos_nvd.get('fecha_publicacion', 'No disponible')}
 Fecha ultima modificacion: {datos_nvd.get('fecha_modificacion', 'No disponible')}
 Referencias: {', '.join(datos_nvd.get('referencias', [])) or 'No disponible'}
-En CISA KEV (explotacion activa confirmada): {datos_kev.get('en_kev', False)}
+Inclusión en CISA KEV: {datos_kev.get('en_kev') if not datos_kev.get('error') else 'No verificada'}. No demuestra compromiso de los activos.
 Prioridad calculada por el sistema: {score.get('prioridad', 'No disponible')}
-Score del sistema: {score.get('score_mostrado', 0)}/100
-Score CVSS puro: {score.get('score_cvss_puro', 0)}/100
+Puntuacion contextual VulnSOC: {score.get('score_interno', score.get('score_mostrado', 0))} puntos, sin limite superior. No es un porcentaje.
+Metodología: {score.get('metodologia_version', 'histórica')}. Prioridad provisional: {score.get('provisional', True)}.
+Limitaciones: {'; '.join(score.get('advertencias', [])) or 'Revisar configuración y aplicabilidad en el entorno.'}
+EPSS: {score.get('epss_score') if score.get('epss_score') is not None else 'Desconocido'}.
+Contexto inventario: {score.get('contexto_inventario', 'Sin verificar')}.
+Factores: {score.get('factores', [])}
+Acción orientativa: {score.get('accion_recomendada', 'Revisar evidencia disponible')}.
 """
 
     if datos_kev.get("en_kev"):
         contexto += f"""
 Nombre en KEV: {datos_kev.get('nombre', 'No disponible')}
 Accion requerida por CISA: {datos_kev.get('accion_requerida', 'No disponible')}
-Fecha limite parche: {datos_kev.get('fecha_limite', 'No disponible')}
+Fecha indicada por la directiva CISA (aplicabilidad según su ámbito): {datos_kev.get('fecha_limite', 'No disponible')}
 """
     return contexto
 
@@ -206,6 +217,8 @@ def generar_regla_sigma(datos_nvd: dict, datos_kev: dict) -> dict:
     try:
         gh_url = "https://api.github.com/search/code"
         headers = {"Accept": "application/vnd.github.v3+json"}
+        if os.getenv("GITHUB_TOKEN"):
+            headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
         params  = {"q": f"{cve_id} repo:SigmaHQ/sigma", "per_page": 3}
         resp = requests.get(gh_url, headers=headers, params=params, timeout=10)
 
@@ -239,7 +252,7 @@ Vulnerabilidad:
 - CVE ID: {cve_id}
 - Descripción: {descripcion}
 - CWEs: {', '.join(cwes) if cwes else 'No disponible'}
-- En CISA KEV (explotación activa): {datos_kev.get('en_kev', False)}
+- Inclusión en CISA KEV: {datos_kev.get('en_kev') if not datos_kev.get('error') else 'Sin verificar'}. No demuestra compromiso del entorno.
 
 INSTRUCCIONES ESTRICTAS:
 - Responde ÚNICAMENTE con el bloque YAML de la regla Sigma, sin explicaciones.
@@ -260,6 +273,9 @@ INSTRUCCIONES ESTRICTAS:
             regla_yaml = "\n".join(
                 l for l in lineas if not l.startswith("```")
             ).strip()
+
+        if not regla_yaml:
+            return {"error": "La IA ha devuelto una regla Sigma vacía. Vuelve a intentarlo."}
 
         return {
             "origen": "ia_generada",

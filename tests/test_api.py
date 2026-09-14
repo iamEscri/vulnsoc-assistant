@@ -55,6 +55,37 @@ class ApiTests(unittest.TestCase):
    self.assertNotIn('error',generar_analisis(SOURCE['nvd'],SOURCE['kev'],{}));self.assertEqual(ai.call_count,3)
   with patch('modules.analisis_ia._llamar_ia',side_effect=RuntimeError('Provider unavailable')):
    self.assertIn('error',generar_analisis(SOURCE['nvd'],SOURCE['kev'],{}))
+ def test_sigma_empty_output_is_an_error(self):
+  from modules.analisis_ia import generar_regla_sigma
+  with patch('requests.get') as get, patch('modules.analisis_ia._llamar_ia',return_value='```yaml\n```'):
+   get.return_value.status_code=401
+   result=generar_regla_sigma(SOURCE['nvd'],SOURCE['kev'])
+  self.assertIn('error',result);self.assertNotIn('regla',result)
+ def test_groq_rejects_empty_or_truncated_output(self):
+  from types import SimpleNamespace
+  from modules.analisis_ia import _llamar_groq
+  with patch('modules.analisis_ia._get_groq_client') as client:
+   for content,finish in [('', 'stop'), ('partial yaml', 'length')]:
+    client.return_value.chat.completions.create.return_value=SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content),finish_reason=finish)])
+    with self.assertRaises(ValueError):_llamar_groq('Test')
+ def test_contextual_score_uses_policy_and_verified_asset(self):
+  from datetime import datetime, timezone
+  nvd={**SOURCE['nvd'],'fecha_publicacion':datetime.now(timezone.utc).isoformat(),'vector_ataque':{'attackVector':'NETWORK','privilegesRequired':'NONE','userInteraction':'NONE','attackComplexity':'LOW'},'cpe_afectados':[{'criteria':'cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*'}]}
+  with patch('backend.app.analizar_cve',return_value={**SOURCE,'nvd':nvd}):
+   response=self.client.post('/api/analyze',json={'cve_id':'CVE-2021-44228','inventario':{'equipos':[{'nombre':'Servidor','tecnologias':['apache log4j 2.14.1'],'criticidad':'alta','exposicion':'internet'}]}})
+  self.assertEqual(response.status_code,200)
+  result=response.json();self.assertEqual(result['score_interno'],195);self.assertEqual(result['prioridad'],'CRÍTICA')
+  self.assertNotIn('score_mostrado',result);self.assertNotIn('score_mostrado',result['score'])
+  from modules.analisis_ia import _construir_contexto
+  self.assertIn('195 puntos',_construir_contexto(nvd,SOURCE['kev'],result['score']))
+ def test_unknown_sources_export_as_unknown(self):
+  from modules.scoring import calcular_score
+  nvd={**SOURCE['nvd'],'cvss_score':None}
+  kev={'error':'Offline'};epss={'epss_score':None,'estado':'sin_datos'}
+  score=calcular_score(nvd,kev,epss)
+  self.assertEqual(score['prioridad'],'SIN DETERMINAR')
+  response=self.client.post('/api/report',json={'cve_id':nvd['cve_id'],'resultado':{'nvd':nvd,'kev':kev,'epss':epss},'score':score})
+  self.assertEqual(response.status_code,200);self.assertTrue(response.content.startswith(b'%PDF-'))
  def test_long_pdf_and_escaped_content(self):
   from modules.scoring import calcular_score
   data={**SOURCE['nvd'],'descripcion':SOURCE['nvd']['descripcion']*150}
