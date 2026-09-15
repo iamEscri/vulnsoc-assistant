@@ -56,7 +56,7 @@ class MethodologyTests(unittest.TestCase):
         self.assertEqual(equipos_afectados(asset('Apache Tomcat 9.0.80'),['apache log4j'],[],[CPE]),[])
         self.assertEqual(equipos_afectados(asset('Apache'),['apache log4j'],[],[CPE]),[])
     def test_numeric_ranges_and_ambiguous_versions(self):
-        for version,expected in [('1.9',False),('2.0',True),('2.14.1',True),('2.15.0',False),('2.15.0-rc1',None),(None,None)]:
+        for version,expected in [('1.9',False),('2.0',True),('2.14.1',True),('2.15.0',False),('2.15.0-rc1',True),(None,None)]:
             with self.subTest(version=version):self.assertIs(version_en_rango(version,CPE),expected)
         self.assertIsNone(version_en_rango('2.14.1',{**CPE,'condicional':True}))
     def test_context_requires_version_and_never_deducts(self):

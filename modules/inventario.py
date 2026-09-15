@@ -22,7 +22,7 @@ no se declara afectación confirmada por coincidencias de texto.
 
 import json
 import re
-from modules.evidencia import normalizar_nombre, partes_cpe, version_en_rango
+from modules.evidencia import normalizar_nombre, partes_cpe, version_en_rango, version_cpe
 
 CRITICIDADES = ["alta", "media", "baja"]
 
@@ -142,7 +142,7 @@ def tecnologias_inventario(inventario: dict) -> set:
 def _identidad_tecnologia(text):
     parts = partes_cpe(text)
     if parts:
-        return normalizar_nombre(f'{parts[3]} {parts[4]}'), parts[5]
+        return normalizar_nombre(f'{parts[3]} {parts[4]}'), version_cpe(parts)
     match = re.fullmatch(r'(.*?)\s+([0-9][0-9a-zA-Z.+_-]*)', text.strip())
     return (normalizar_nombre(match[1]), match[2]) if match else (normalizar_nombre(text), None)
 
@@ -151,7 +151,7 @@ def equipos_afectados(inventario: dict, productos_afectados: list,
                       plataformas_afectadas: list = None, cpe_afectados: list = None) -> list:
     """Candidates, never confirmed affected hosts. Exact product identity first.
 
-    Version compatibility is limited to simple numeric CPE ranges. Negation,
+    Version compatibility is limited to numeric CPE ranges and recognized release suffixes. Negation,
     environmental AND requirements and special CPE attributes remain unverified.
     """
     catalog = []
