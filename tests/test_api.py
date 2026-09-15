@@ -86,6 +86,13 @@ class ApiTests(unittest.TestCase):
   self.assertEqual(score['prioridad'],'SIN DETERMINAR')
   response=self.client.post('/api/report',json={'cve_id':nvd['cve_id'],'resultado':{'nvd':nvd,'kev':kev,'epss':epss},'score':score})
   self.assertEqual(response.status_code,200);self.assertTrue(response.content.startswith(b'%PDF-'))
+ def test_report_preserves_snapshot_metadata(self):
+  assets=[{'nombre':'Servidor de producción','criticidad':'alta','exposicion':'internet','estado':'version_compatible'}]
+  payload={'cve_id':SOURCE['nvd']['cve_id'],'resultado':SOURCE,'score':{},'equipos_afectados':assets,'fecha':'2026-09-14T10:30:00Z'}
+  with patch('backend.app.generar_pdf',wraps=generar_pdf) as exporter:
+   response=self.client.post('/api/report',json=payload)
+  self.assertEqual(response.status_code,200)
+  self.assertEqual(exporter.call_args.kwargs,{'equipos_afectados':assets,'fecha_analisis':payload['fecha']})
  def test_long_pdf_and_escaped_content(self):
   from modules.scoring import calcular_score
   data={**SOURCE['nvd'],'descripcion':SOURCE['nvd']['descripcion']*150}

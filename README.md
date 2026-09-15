@@ -45,7 +45,7 @@ Reúne **NVD, CISA KEV y FIRST EPSS**, incorpora el contexto declarado de tus ac
 | **Detalle de CVE** | Revisar CVSS, EPSS, KEV, factores del score, referencias y activos relacionados. |
 | **Análisis con IA** | Generar resumen ejecutivo, análisis técnico y mitigación, con títulos, listas, tablas y código formateados. |
 | **Detección Sigma** | Consultar reglas o generar un borrador y descargarlo en YAML para su revisión. |
-| **Informe PDF** | Exportar el resultado y el análisis disponible sin exigir una generación de IA. |
+| **Informe PDF** | Documento VulnSOC con resumen de decisión, scoring visual, evidencias, referencias y análisis asistido opcional. |
 | **Metodología** | Consultar reglas, umbrales, ejemplos paso a paso y limitaciones desde la propia aplicación. |
 
 La interfaz mantiene navegación superior, colores semánticos y adaptación a móvil, con soporte para movimiento reducido.

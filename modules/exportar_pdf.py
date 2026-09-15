@@ -1,451 +1,293 @@
+"""VulnSOC Intelligence Brief: evidence first, reproducible scoring, optional AI appendix."""
+from datetime import datetime, timezone
+from hashlib import sha256
+from html import escape
+from pathlib import Path
+import io
+import json
+import math
+
+import reportlab
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.units import cm
-from reportlab.lib import colors
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-)
-from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
-from datetime import datetime
-import io, re
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+                               PageBreak, Flowable, CondPageBreak)
+from modules.pdf_markdown import markdown_flowables, safe_url
 
-# ── Paleta ───────────────────────────────────────────────────────────────────
-NAVY   = colors.HexColor("#0f2744")
-SURF   = colors.HexColor("#f8fafc")
-SURF2  = colors.HexColor("#f1f5f9")
-BORDER = colors.HexColor("#e2e8f0")
-TXT    = colors.HexColor("#0f172a")
-TMID   = colors.HexColor("#334155")
-MUTED  = colors.HexColor("#64748b")
-WHITE  = colors.white
+FONT_DIR = Path(reportlab.__file__).parent / 'fonts'
+for name, file in [('VS-Italic', 'VeraIt.ttf'), ('VS-BoldItalic', 'VeraBI.ttf')]:
+    pdfmetrics.registerFont(TTFont(name, str(FONT_DIR / file)))
+for name, file in [('VS', 'DejaVuSans.ttf'), ('VS-Bold', 'DejaVuSans-Bold.ttf'), ('VS-Mono', 'DejaVuSansMono.ttf')]:
+    pdfmetrics.registerFont(TTFont(name, str(Path(__file__).parent / 'report_fonts' / file)))
+pdfmetrics.registerFontFamily('VS', normal='VS', bold='VS-Bold', italic='VS-Italic', boldItalic='VS-BoldItalic')
 
-P_HEX = {
-    "CRITICA":  "#dc2626",
-    "CRÍTICA":  "#dc2626",
-    "ALTA":     "#ea580c",
-    "MEDIA":    "#d97706",
-    "BAJA":     "#16a34a",
-}
-
+NAVY = colors.HexColor('#15354e')
+TEAL = colors.HexColor('#247889')
+INK = colors.HexColor('#203c50')
+MUTED = colors.HexColor('#596e7c')
+PALE = colors.HexColor('#edf3f6')
+LINE = colors.HexColor('#cddce3')
+WHITE = colors.white
+PRIORITY = {'CRÍTICA':'#b53f56', 'CRITICA':'#b53f56', 'ALTA':'#ae5425', 'MEDIA':'#886410', 'BAJA':'#287354'}
 PAGE_W, PAGE_H = A4
-MH = 1.8 * cm
-MV = 2.2 * cm
-CW = PAGE_W - 2 * MH
+MARGIN = 42
+WIDTH = PAGE_W - MARGIN*2
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-def _x(t):
-    return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def _x(value): return escape(str(value if value is not None else ''), quote=True)
+def _number(value): return type(value) in (int, float) and math.isfinite(value)
+def _date(value):
+    if not value: return 'No registrada'
+    try:
+        parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        if parsed.tzinfo:
+            return parsed.astimezone(timezone.utc).strftime('%d/%m/%Y %H:%M UTC')
+        return parsed.strftime('%d/%m/%Y')
+    except (ValueError, TypeError): return str(value)
 
 
-def _inline(t):
-    s = _x(t)
-    s = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', s)
-    s = re.sub(r'\*(.+?)\*',     r'<i>\1</i>', s)
-    s = re.sub(r'`(.+?)`', r'<font name="Courier" size="8">\1</font>', s)
-    return s
-
-
-def _p_hex(prior):
-    return P_HEX.get(prior, "#1e40af")
-
-
-def _section_bar(title, hex_color="#0f2744"):
-    lbl = ParagraphStyle("_sl", fontSize=9, fontName="Helvetica-Bold",
-                          textColor=TXT, leading=13)
-    t = Table([[None, Paragraph(title.upper(), lbl)]],
-              colWidths=[5, CW - 5], rowHeights=[21])
-    t.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (0, 0),  colors.HexColor(hex_color)),
-        ("BACKGROUND",    (1, 0), (1, 0),  SURF2),
-        ("LEFTPADDING",   (1, 0), (1, 0),  9),
-        ("TOPPADDING",    (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-    ]))
-    return t
-
-
-# ── Markdown parser ───────────────────────────────────────────────────────────
-_SKIP = {
-    "resumen ejecutivo", "análisis técnico", "analisis tecnico",
-    "plan de mitigación", "plan de mitigacion", "resumen",
-    "conclusión", "conclusion", "importante", "nota",
-    "recomendaciones", "decisiones a tomar", "urgencia y prioridad",
-    "decisión a tomar", "contexto de explotación",
-    "contexto de explotacion", "impacto", "acción requerida",
-    "sistemas afectados", "vector de ataque",
-}
-
-
-def _md(text, S):
-    out = []
-    for raw in text.split("\n"):
-        ln = raw.strip()
-        if not ln:
-            continue
-        m = re.match(r'^#{1,6}\s+(.+)$', ln)
-        if m:
-            h = m.group(1).strip().rstrip(":")
-            if h.lower() not in _SKIP:
-                out.append(Paragraph(_inline(h), S["sub"]))
-            continue
-        if re.match(r'^[-*]\s+', ln):
-            body = re.sub(r'^[-*]\s+', '', ln)
-            out.append(Paragraph(f"  -  {_inline(body)}", S["bul"]))
-            continue
-        m2 = re.match(r'^(\d+)\.\s+(.+)$', ln)
-        if m2:
-            out.append(Paragraph(
-                f"<b>{m2.group(1)}.</b>  {_inline(m2.group(2))}", S["num"]))
-            continue
-        if re.match(r'^https?://\S+$', ln):
-            continue
-        if ln.lower().rstrip(":") in _SKIP:
-            continue
-        out.append(Paragraph(_inline(ln), S["body"]))
-    return out
-
-
-# ── Header / footer por página ────────────────────────────────────────────────
-def _page_fn(cve_id, fecha):
-    def fn(c, doc):
-        c.saveState()
-        c.setFillColor(NAVY)
-        c.rect(MH, PAGE_H - MV + 4, CW, 0.6, fill=1, stroke=0)
-        c.setFont("Helvetica", 6.5)
-        c.setFillColor(MUTED)
-        c.drawString(MH, PAGE_H - MV + 6,
-                     "VulnSOC Assistant  -  Informe de vulnerabilidad")
-        c.drawRightString(PAGE_W - MH, PAGE_H - MV + 6,
-                          "CONFIDENCIAL  |  Uso interno")
-        c.setFillColor(NAVY)
-        c.rect(MH, MV - 8, CW, 0.6, fill=1, stroke=0)
-        c.setFont("Helvetica", 6.5)
-        c.setFillColor(MUTED)
-        c.drawString(MH, MV - 14,
-                     f"{cve_id}  |  NVD (NIST)  -  CISA KEV  -  EPSS (FIRST.org)")
-        c.drawRightString(PAGE_W - MH, MV - 14, f"Pag. {doc.page}")
-        c.restoreState()
-    return fn
-
-
-# ── Función principal ─────────────────────────────────────────────────────────
-def generar_pdf(datos_nvd, datos_kev, datos_epss, score, analisis):
-    buf   = io.BytesIO()
-    fecha = datetime.now().strftime("%d %b %Y  %H:%M")
-    cve   = datos_nvd.get("cve_id", "N/A")
-    prior = score.get("prioridad", "")
-    p_hex = _p_hex(prior)
-    p_col = colors.HexColor(p_hex)
-
-    doc = SimpleDocTemplate(buf, pagesize=A4,
-                            leftMargin=MH, rightMargin=MH,
-                            topMargin=MV, bottomMargin=MV)
-
-    S = {
-        "h1":  ParagraphStyle("h1",  fontSize=20, fontName="Helvetica-Bold",
-                              textColor=WHITE, leading=24),
-        "sh2": ParagraphStyle("sh2", fontSize=9,  fontName="Helvetica",
-                              textColor=colors.HexColor("#93c5fd"), leading=13),
-        "sh3": ParagraphStyle("sh3", fontSize=8,  fontName="Helvetica",
-                              textColor=colors.HexColor("#94a3b8"), leading=12),
-        "sub": ParagraphStyle("sub", fontSize=9,  fontName="Helvetica-Bold",
-                              textColor=TMID, leading=13,
-                              spaceBefore=7, spaceAfter=3),
-        "body": ParagraphStyle("body", fontSize=8.5, fontName="Helvetica",
-                               textColor=TXT, leading=14, spaceAfter=4,
-                               alignment=TA_JUSTIFY),
-        "bul": ParagraphStyle("bul", fontSize=8.5, fontName="Helvetica",
-                              textColor=TXT, leading=13,
-                              leftIndent=8, spaceAfter=2),
-        "num": ParagraphStyle("num", fontSize=8.5, fontName="Helvetica",
-                              textColor=TXT, leading=14,
-                              leftIndent=8, spaceAfter=3),
-        "th":  ParagraphStyle("th",  fontSize=8,   fontName="Helvetica-Bold",
-                              textColor=WHITE, leading=12),
-        "ml":  ParagraphStyle("ml",  fontSize=6,   fontName="Helvetica-Bold",
-                              textColor=MUTED, leading=9,  alignment=TA_CENTER),
-        "mv":  ParagraphStyle("mv",  fontSize=11,  fontName="Helvetica-Bold",
-                              textColor=TXT,   leading=15, alignment=TA_CENTER),
+def _styles():
+    body = ParagraphStyle('body', fontName='VS', fontSize=9.3, leading=14.5, textColor=INK, spaceAfter=8, splitLongWords=True)
+    return {
+        'body': body,
+        'small': ParagraphStyle('small', parent=body, fontSize=8, leading=12, textColor=MUTED, spaceAfter=5),
+        'cell': ParagraphStyle('cell', parent=body, fontSize=8.3, leading=12.5, spaceAfter=0),
+        'th': ParagraphStyle('th', parent=body, fontName='VS-Bold', fontSize=8, leading=12, textColor=WHITE, spaceAfter=0),
+        'sub': ParagraphStyle('sub', parent=body, fontName='VS-Bold', fontSize=11, leading=16, spaceBefore=14, spaceAfter=8, keepWithNext=True),
+        'section': ParagraphStyle('section', parent=body, fontName='VS-Bold', fontSize=19, leading=25, spaceAfter=16, keepWithNext=True),
+        'kicker': ParagraphStyle('kicker', parent=body, fontName='VS-Bold', fontSize=8, leading=12, textColor=TEAL, spaceBefore=4, spaceAfter=7, keepWithNext=True),
+        'code': ParagraphStyle('code', parent=body, fontName='VS-Mono', fontSize=8, leading=11, backColor=PALE, spaceAfter=0),
+        'hero': ParagraphStyle('hero', parent=body, fontName='VS-Bold', fontSize=23, leading=30, textColor=WHITE, spaceAfter=8),
+        'light': ParagraphStyle('light', parent=body, fontSize=8, leading=12, textColor=colors.HexColor('#bcd8e3'), spaceAfter=4),
     }
 
-    def sp(h=8): return Spacer(1, h)
+
+class ReportDocument(SimpleDocTemplate):
+    def afterFlowable(self, flowable):
+        if getattr(flowable, 'report_bookmark', None):
+            key, label = flowable.report_bookmark
+            self.report_ai = key == 'chapter-04'
+            self.canv.bookmarkPage(key)
+            self.canv.addOutlineEntry(label, key, level=0, closed=False)
+
+
+def _page(cve, reference):
+    def draw(canvas, doc):
+        canvas.saveState()
+        canvas.setFillColor(NAVY)
+        canvas.rect(0, PAGE_H-8, PAGE_W, 8, fill=1, stroke=0)
+        # A compact shield echoes the web identity without a raster background.
+        canvas.setStrokeColor(TEAL); canvas.setLineWidth(1.2)
+        p = canvas.beginPath(); x, y = MARGIN, PAGE_H-37
+        p.moveTo(x, y+8); p.lineTo(x+6, y+11); p.lineTo(x+12, y+8); p.lineTo(x+12, y+1)
+        p.curveTo(x+12, y-4, x+6, y-7, x+6, y-7); p.curveTo(x+6, y-7, x, y-4, x, y+1); p.close()
+        canvas.drawPath(p)
+        canvas.setFont('VS-Bold', 12); canvas.setFillColor(NAVY)
+        canvas.drawString(MARGIN+20, PAGE_H-39, 'VulnSOC')
+        canvas.setFont('VS', 7); canvas.setFillColor(MUTED)
+        canvas.drawRightString(PAGE_W-MARGIN, PAGE_H-37, 'ANÁLISIS ASISTIDO POR IA / REVISIÓN TÉCNICA' if getattr(doc, 'report_ai', False) else 'VULNERABILITY INTELLIGENCE / INFORME TÉCNICO')
+        canvas.setStrokeColor(LINE); canvas.setLineWidth(.5)
+        canvas.line(MARGIN, 39, PAGE_W-MARGIN, 39)
+        canvas.setFont('VS', 7)
+        canvas.drawString(MARGIN, 25, f'iamEscri · vulnsoc.iamescri.es · {reference}')
+        canvas.drawRightString(PAGE_W-MARGIN, 25, f'{cve}   /   {doc.page:02d}')
+        canvas.linkURL('https://vulnsoc.iamescri.es', (MARGIN, 20, MARGIN+220, 34), relative=0, thickness=0)
+        canvas.restoreState()
+    return draw
+
+
+class ContributionBar(Flowable):
+    def __init__(self, start, end, low, high, width):
+        super().__init__(); self.start, self.end, self.low, self.high = start, end, low, high
+        self.width, self.height = width, 22
+    def draw(self):
+        c = self.canv
+        pos = lambda n: (n-self.low)/(self.high-self.low)*self.width
+        c.setFillColor(PALE); c.roundRect(0, 7, self.width, 7, 3, fill=1, stroke=0)
+        c.setFillColor(TEAL if self.end >= self.start else colors.HexColor('#9a596b'))
+        if self.end == self.start: c.circle(pos(self.end), 10.5, 2.5, fill=1, stroke=0)
+        else: c.rect(pos(min(self.start, self.end)), 7, abs(pos(self.end)-pos(self.start)), 7, fill=1, stroke=0)
+
+
+def generar_pdf(datos_nvd, datos_kev, datos_epss, score, analisis, equipos_afectados=None, fecha_analisis=None):
+    """Export the supplied snapshot unchanged; no network access or score recalculation."""
+    buf = io.BytesIO(); S = _styles()
+    cve = str(datos_nvd.get('cve_id', 'Sin identificador'))
+    prior = str(score.get('prioridad') or 'SIN DETERMINAR')
+    tone = colors.HexColor(PRIORITY.get(prior, '#526a81'))
+    points = score.get('score_interno', score.get('score_mostrado'))
+    points_text = str(points) if _number(points) and prior != 'SIN DETERMINAR' else 'Sin determinar'
+    version = str(score.get('metodologia_version') or 'histórica / sin versión')
+    known_kev = type(datos_kev.get('en_kev')) is bool and not datos_kev.get('error')
+    kev = known_kev and datos_kev['en_kev']
+    epss = datos_epss.get('epss_score')
+    known_epss = _number(epss) and 0 <= epss <= 1 and not datos_epss.get('error')
+    cvss = datos_nvd.get('cvss_score')
+    known_cvss = _number(cvss) and 0 <= cvss <= 10 and not datos_nvd.get('error')
+    warnings = list(score.get('advertencias') or [])
+    snapshot = [datos_nvd, datos_kev, datos_epss, score, analisis, equipos_afectados, fecha_analisis]
+    reference = sha256(json.dumps(snapshot, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()[:12].upper()
+    generated = datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M UTC')
+    doc = ReportDocument(buf, pagesize=A4, leftMargin=MARGIN-6, rightMargin=MARGIN-6,
+                         topMargin=64, bottomMargin=52, title=f'{cve} | VulnSOC Intelligence Brief',
+                         author='iamEscri · VulnSOC Assistant', subject='Evidencias y priorización contextual de vulnerabilidades')
     story = []
+    p = lambda text, style='body': Paragraph(_x(text), S[style])
 
-    # ── 1. Banner ─────────────────────────────────────────────────────────
-    pill_st = ParagraphStyle("pill", fontSize=7.5, fontName="Helvetica-Bold",
-                              textColor=WHITE, alignment=TA_CENTER, leading=11)
-    pill = Table([[Paragraph(prior, pill_st)]],
-                 colWidths=[2.4 * cm], rowHeights=[15])
-    pill.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, -1), p_col),
-        ("TOPPADDING",    (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-    ]))
+    def section(number, title, note=None):
+        story.append(p(number+' / VULNSOC INTELLIGENCE BRIEF', 'kicker'))
+        heading = p(title, 'section'); heading.report_bookmark = ('chapter-'+number, title); story.append(heading)
+        if note: story.append(p(note))
 
-    r1 = Table([[Paragraph(_x(cve), S["h1"]), pill]],
-               colWidths=[CW - 3.2 * cm, 3.2 * cm])
-    r1.setStyle(TableStyle([
-        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN",         (1, 0), (1, 0),   "RIGHT"),
-        ("RIGHTPADDING",  (1, 0), (1, 0),   0),
-        ("LEFTPADDING",   (0, 0), (0, 0),   0),
-        ("TOPPADDING",    (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-    ]))
+    def table(headers, rows, widths):
+        cells = [[p(h, 'th') for h in headers]] + [[p(v, 'cell') for v in row] for row in rows]
+        t = Table(cells, colWidths=widths, repeatRows=1, splitByRow=1, splitInRow=1, hAlign='LEFT')
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), NAVY), ('ROWBACKGROUNDS',(0,1),(-1,-1),[WHITE,PALE]),
+            ('LINEBELOW',(0,0),(-1,-1),.4,LINE), ('VALIGN',(0,0),(-1,-1),'TOP'),
+            ('LEFTPADDING',(0,0),(-1,-1),9), ('RIGHTPADDING',(0,0),(-1,-1),9),
+            ('TOPPADDING',(0,0),(-1,-1),9), ('BOTTOMPADDING',(0,0),(-1,-1),9),
+        ])); return t
 
-    banner = Table([
-        [r1],
-        [Paragraph("Informe de inteligencia de vulnerabilidad", S["sh2"])],
-        [Paragraph(f"Generado: {fecha}", S["sh3"])],
-    ], colWidths=[CW])
-    banner.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, -1), NAVY),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 16),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 14),
-        ("TOPPADDING",    (0, 0), (0, 0),   22),
-        ("BOTTOMPADDING", (0, 0), (0, 0),   6),
-        ("TOPPADDING",    (0, 1), (0, 1),   4),
-        ("BOTTOMPADDING", (0, 1), (0, 1),   2),
-        ("TOPPADDING",    (0, 2), (0, 2),   2),
-        ("BOTTOMPADDING", (0, 2), (0, 2),   18),
-    ]))
-    story += [banner, sp(4)]
+    # Page one is a concise decision brief, with all source text preserved later.
+    left = [p('INFORME DE PRIORIZACIÓN', 'light'), p(cve, 'hero'), p('Evidencias · contexto · decisión', 'light')]
+    score_style = ParagraphStyle('score', parent=S['hero'], fontSize=32 if _number(points) and prior != 'SIN DETERMINAR' else 16, leading=38 if _number(points) and prior != 'SIN DETERMINAR' else 23)
+    right = [p('VULNSOC SCORE', 'light'), Paragraph(_x(points_text), score_style), p('puntos · '+prior, 'light')]
+    hero = Table([[left,right]], colWidths=[WIDTH*.65, WIDTH*.35], hAlign='LEFT')
+    hero.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),NAVY),('BACKGROUND',(1,0),(1,0),tone),
+        ('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),18),('RIGHTPADDING',(0,0),(-1,-1),18),
+        ('TOPPADDING',(0,0),(-1,-1),18),('BOTTOMPADDING',(0,0),(-1,-1),16)]))
+    story.extend([hero,Spacer(1,12),p(f'Exportado: {generated}   ·   Metodología: {version}', 'small'),
+                  p(f'Análisis guardado: {_date(fecha_analisis)}   ·   Referencia: {reference}', 'small'),Spacer(1,12)])
+    section('01','Decisión y alcance')
+    action = score.get('accion_recomendada') or 'Revisar evidencias y aplicabilidad. El informe conserva la metodología original.'
+    story.append(p(action,'sub'))
+    story.append(p('Evaluación provisional: hay datos o contexto pendientes.' if score.get('provisional', True) else 'Priorización orientativa basada en la instantánea disponible.', 'small'))
+    metric_rows = [[f'{cvss:g}/10' if known_cvss else 'Sin datos', f'{epss:.1%}' if known_epss else 'Sin datos', 'Incluida' if kev else 'No listada' if known_kev else 'Sin verificar'],
+                   [f"CVSS {datos_nvd.get('cvss_version') or 'sin versión'}", 'Predicción a 30 días', 'Explotación documentada' if kev else 'Ausencia de listado no implica seguridad']]
+    metric_style = ParagraphStyle('metric_value', parent=S['body'], fontName='VS-Bold', fontSize=16, leading=22, textColor=NAVY, spaceAfter=0)
+    metrics = Table([[p(label,'th') for label in ['SEVERIDAD CVSS','PROBABILIDAD EPSS','CISA KEV']],
+                     [Paragraph(_x(value),metric_style) for value in metric_rows[0]],
+                     [p(value,'small') for value in metric_rows[1]]],colWidths=[WIDTH/3]*3,hAlign='LEFT')
+    metrics.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),NAVY),('BACKGROUND',(0,1),(-1,-1),PALE),
+        ('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),10),('RIGHTPADDING',(0,0),(-1,-1),10),
+        ('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8)]))
+    story.extend([metrics,Spacer(1,12)])
+    context = {
+        'sin_inventario':'Sin inventario: este resultado no evalúa el riesgo de un entorno concreto.',
+        'version_compatible':'Hay compatibilidad de versión. Verifica la configuración; no confirma compromiso.',
+        'pendiente_verificacion':'Aplicabilidad pendiente: revisa producto, versión y configuración.',
+        'sin_coincidencias':'Sin coincidencias verificadas. No demuestra ausencia de riesgo en el entorno.',
+    }.get(score.get('contexto_inventario'), 'El informe no registra un estado de aplicabilidad al inventario.')
+    story.extend([p('Aplicabilidad al entorno','sub'),p(context)])
+    desc = str(datos_nvd.get('descripcion') or 'Descripción no disponible en esta instantánea.')
+    excerpt = desc if len(desc) <= 470 else desc[:470].rsplit(' ',1)[0]+'…'
+    story.extend([p('Descripción de la fuente · NVD','sub'),p(excerpt),p('Descripción completa y referencias en Evidencias técnicas.','small')])
+    if warnings: story.append(p(f'Hay {len(warnings)} advertencia(s). Consulta el detalle en Trazabilidad del score.', 'small'))
+    story.append(p('Lectura del informe: 02 Scoring · 03 Evidencias · 04 Análisis asistido', 'small'))
+    story.append(PageBreak())
 
-    # ── 2. Descripción NVD ────────────────────────────────────────────────
-    desc = datos_nvd.get("descripcion", "")
-    if desc:
-        short = desc[:600] + ("..." if len(desc) > 600 else "")
-        dbox = Table(
-            [[Paragraph(_x(short),
-                         ParagraphStyle("ds", fontSize=8.5, fontName="Helvetica",
-                                         textColor=TMID, leading=14))]],
-            colWidths=[CW]
-        )
-        dbox.setStyle(TableStyle([
-            ("BACKGROUND",    (0, 0), (-1, -1), SURF),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 12),
-            ("RIGHTPADDING",  (0, 0), (-1, -1), 12),
-            ("TOPPADDING",    (0, 0), (-1, -1), 10),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-            ("LINEABOVE",     (0, 0), (-1,  0),  2, p_col),
-        ]))
-        story += [dbox, sp(10)]
+    section('02','Trazabilidad del score','La puntuación explica una política de priorización. No es un porcentaje ni una probabilidad de compromiso.')
+    if version == '2.0':
+        story.append(table(['BAJA','MEDIA','ALTA','CRÍTICA'],[['0–54 puntos','55–89 puntos','90–129 puntos','Desde 130 puntos']],[WIDTH/4]*4))
+        story.append(Spacer(1,12))
+        story.append(p('CVSS se incorpora una sola vez. KEV aporta +60 y tiene precedencia sobre EPSS; sin KEV confirmado, EPSS aplica un único tramo (+0 / +10 / +20 / +30). KEV garantiza al menos 90 puntos antes del contexto de activos.'))
+        story.append(p('El contexto utiliza un solo activo compatible: +5 por versión, +0 / +5 / +15 por criticidad y +15 por exposición declarada a Internet. Sin coincidencia verificable no resta puntos. Crítica comienza en 130; el máximo actual por las reglas es 195.','small'))
+    else: story.append(p('Informe histórico: no se aplican los umbrales actuales ni se recalcula el resultado. Compara únicamente informes de la misma metodología.'))
+    factors = score.get('factores') or []
+    running = 0; rows = []
+    for factor in factors:
+        value = factor.get('puntos')
+        if not _number(value): raise ValueError('Puntos de factor no válidos')
+        rows.append((factor,running,running+value)); running += value
+    low = min([0]+[min(a,b) for _,a,b in rows]); high = max([1]+[max(a,b) for _,a,b in rows])
+    span = high-low; low -= span*.015; high += span*.015
+    for i,(factor,start,end) in enumerate(rows,1):
+        val = factor['puntos']; label = ('+' if val>0 else '')+str(val)+' pts'
+        chart = Table([[p(f'{i:02d}  {factor.get("factor", "Factor")}', 'cell'), ContributionBar(start,end,low,high,WIDTH*.29-18),p(label,'cell'),p(f'Σ {end:g}','cell')],
+                       [p(factor.get('detalle') or 'Detalle no registrado.','small'),'','','']],
+                      colWidths=[WIDTH*.41,WIDTH*.29,WIDTH*.15,WIDTH*.15], splitByRow=1,splitInRow=1,hAlign='LEFT')
+        chart.setStyle(TableStyle([('SPAN',(0,1),(-1,1)),('BACKGROUND',(0,0),(-1,-1),PALE),('VALIGN',(0,0),(-1,-1),'TOP'),
+            ('LINEBEFORE',(0,0),(0,-1),2,TEAL),('LEFTPADDING',(0,0),(-1,-1),9),('RIGHTPADDING',(0,0),(-1,-1),9),
+            ('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),7)]))
+        story.extend([chart,Spacer(1,8)])
+    if not rows: story.append(p('Este informe no incluye el desglose de factores.'))
+    if rows and _number(points) and abs(running-points)>.01:
+        story.append(p(f'Desglose parcial: los factores suman {running:g}, pero el informe registra {points:g}. Se conserva el resultado original.'))
+    story.append(p(f'Resultado registrado: {points_text} · {prior}', 'sub'))
+    if prior=='SIN DETERMINAR' and _number(points):story.append(p(f'Puntos parciales registrados: {points:g}. No permiten asignar una prioridad definitiva.'))
+    story.append(p('Calidad de la evidencia','sub'))
+    if warnings:
+        for warning in warnings: story.append(p('• '+str(warning)))
+    else: story.append(p('La instantánea no registra advertencias. Esto no sustituye la revisión de aplicabilidad ni acredita seguridad del entorno.'))
+    story.append(p('Las barras muestran aportaciones acumuladas; el punto indica una aportación de cero.', 'small'))
+    story.append(p('Metodología propia de VulnSOC, no calibrada estadísticamente. Las fuentes no avalan sus pesos.','small'))
+    story.append(Paragraph('<a href="https://github.com/iamEscri/vulnsoc-assistant/blob/main/docs-methodology.md" color="#176477">Consultar metodología y límites del motor</a>',S['small']))
+    story.append(PageBreak())
 
-    # ── 3. Métricas ───────────────────────────────────────────────────────
-    story.append(_section_bar("Metricas de riesgo", p_hex))
-    story.append(sp(6))
-
-    kev_on  = datos_kev.get("en_kev", False)
-    epss_v  = datos_epss.get("epss_score")
-    epss_known = isinstance(epss_v, (int, float)) and not datos_epss.get("error")
-    kev_known = isinstance(datos_kev.get("en_kev"), bool) and not datos_kev.get("error")
-    cvss_p  = score.get("score_cvss_puro", 0)
-
-    kev_h   = "#dc2626" if kev_on else "#475569"
-    kev_txt = "INCLUIDA" if kev_on and kev_known else "No listada" if kev_known else "Sin verificar"
-    epss_h  = "#475569" if not epss_known else ("#dc2626" if epss_v > 0.7 else "#ea580c" if epss_v > 0.3 else "#334155")
-    cvss_h  = ("#dc2626" if cvss_p >= 90 else "#ea580c" if cvss_p >= 70
-               else "#d97706" if cvss_p >= 40 else "#16a34a")
-
-    def _lbl(t): return Paragraph(_x(t), S["ml"])
-    def _val(t, h="#0f172a"):
-        return Paragraph(f'<font color="{h}">{_x(str(t))}</font>', S["mv"])
-
-    labels = [_lbl("VULNSOC SCORE"), _lbl("CVSS"),
-              _lbl("PRIORIDAD"),     _lbl("CISA KEV"),       _lbl("EPSS"),
-              _lbl("TIPO")]
-    values = [
-        _val(("Sin determinar" if prior == "SIN DETERMINAR" else f"{score.get('score_interno', score.get('score_mostrado', 0))} pts"), p_hex),
-        _val((f"{datos_nvd['cvss_score']}/10" if datos_nvd.get('cvss_score') is not None else "Sin datos"), cvss_h),
-        _val(prior,                                    p_hex),
-        _val(kev_txt,                                  kev_h),
-        _val(f"{epss_v:.1%}" if epss_known else "Sin datos", epss_h),
-        _val(score.get("tipo_vulnerabilidad", "-"),    "#334155"),
-    ]
-
-    mt = Table([labels, values], colWidths=[CW / 6] * 6)
-    mt.setStyle(TableStyle([
-        ("GRID",          (0, 0), (-1, -1), 0.4, BORDER),
-        ("BACKGROUND",    (0, 0), (-1, -1), WHITE),
-        ("TOPPADDING",    (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 3),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 3),
-        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("LINEBELOW",     (0, 1), (-1, 1),  2, p_col),
-    ]))
-    story += [mt, sp(10)]
-
-    methodology = score.get('metodologia_version', 'histórica / sin versión')
-    status = 'PROVISIONAL' if score.get('provisional', True) else 'Orientativa'
-    notes = [f"Metodología {methodology} · {status}. Política propia, no probabilidad de riesgo calibrada.", score.get('accion_recomendada', 'Reanalizar para aplicar la política actual.'), *score.get('advertencias', [])]
-    for note in notes:
-        story.append(Paragraph(_x(note), ParagraphStyle('methodology', fontName='Helvetica', fontSize=9, leading=13, spaceAfter=5)))
-    story.append(sp(6))
-
-    # ── 4. Alerta KEV ────────────────────────────────────────────────────
-    if kev_on:
-        kev_msg = (
-            f"EXPLOTACION DOCUMENTADA POR CISA  -  "
-            f"Incluido en CISA KEV el {datos_kev.get('fecha_añadido', 'N/A')}  |  "
-            f"Fecha de directiva CISA (según ámbito): {datos_kev.get('fecha_limite', 'N/A')}"
-        )
-        kab = Table(
-            [[Paragraph(_x(kev_msg),
-                         ParagraphStyle("kev", fontSize=8, fontName="Helvetica-Bold",
-                                         textColor=WHITE, leading=13))]],
-            colWidths=[CW]
-        )
-        kab.setStyle(TableStyle([
-            ("BACKGROUND",    (0, 0), (-1, -1), colors.HexColor("#7f1d1d")),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 12),
-            ("TOPPADDING",    (0, 0), (-1, -1), 8),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-            ("LINEABOVE",     (0, 0), (-1,  0), 2, colors.HexColor("#dc2626")),
-        ]))
-        story += [kab, sp(10)]
-
-    # ── 5. Resumen ejecutivo ──────────────────────────────────────────────
-    if analisis.get("resumen_ejecutivo"):
-        story.append(_section_bar("Resumen ejecutivo"))
-        story.append(sp(6))
-        story.extend(_md(analisis["resumen_ejecutivo"], S))
-        story.append(sp(10))
-
-    # ── 6. Factores de scoring ────────────────────────────────────────────
-    factores = score.get("factores", [])
-    if factores:
-        story.append(_section_bar("Factores de scoring"))
-        story.append(sp(6))
-
-        th_st = ParagraphStyle("fth", fontSize=8, fontName="Helvetica-Bold",
-                                textColor=WHITE, leading=12)
-        rows = [[
-            Paragraph("Factor",   th_st),
-            Paragraph("Puntos",   th_st),
-            Paragraph("Detalle",  th_st),
-        ]]
-        for f in factores:
-            pts     = f["puntos"]
-            pts_hex = "#16a34a" if pts >= 0 else "#dc2626"
-            pts_str = f"+{pts}" if pts > 0 else str(pts)
-            rows.append([
-                Paragraph(_x(f["factor"]),
-                    ParagraphStyle("fn", fontSize=8, fontName="Helvetica-Bold",
-                                    textColor=colors.HexColor("#1e40af"), leading=12)),
-                Paragraph(f'<font color="{pts_hex}">{pts_str}</font>',
-                    ParagraphStyle("fp", fontSize=8, fontName="Helvetica-Bold",
-                                    textColor=TXT, leading=12, alignment=TA_CENTER)),
-                Paragraph(_x(f["detalle"]),
-                    ParagraphStyle("fd", fontSize=8, fontName="Helvetica",
-                                    textColor=TXT, leading=12)),
-            ])
-
-        ft = Table(rows, colWidths=[3.8 * cm, 1.4 * cm, CW - 5.2 * cm])
-        ft.setStyle(TableStyle([
-            ("BACKGROUND",     (0, 0), (-1,  0), NAVY),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, SURF2]),
-            ("GRID",           (0, 0), (-1, -1), 0.3, BORDER),
-            ("TOPPADDING",     (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING",  (0, 0), (-1, -1), 5),
-            ("LEFTPADDING",    (0, 0), (-1, -1), 8),
-            ("VALIGN",         (0, 0), (-1, -1), "TOP"),
-            ("ALIGN",          (1, 0), (1,  -1), "CENTER"),
-        ]))
-        story += [ft, sp(10)]
-
-    # ── 7. Vector de ataque ───────────────────────────────────────────────
-    vector = datos_nvd.get("vector_ataque", {})
+    section('03','Evidencias técnicas','Datos de la instantánea utilizada para el análisis. Exportar este documento no actualiza las fuentes.')
+    story.append(table(['FUENTE / DATO','ESTADO','FECHA DISPONIBLE'],[
+        ['NVD / CVSS','Disponible' if known_cvss else 'Severidad sin datos',_date(datos_nvd.get('consultado_en'))],
+        ['CISA KEV','Incluida' if kev else 'No listada' if known_kev else 'Sin verificar',_date(datos_kev.get('consultado_en'))],
+        ['FIRST EPSS','Disponible' if known_epss else 'Sin datos',_date(datos_epss.get('fecha') or datos_epss.get('date') or datos_epss.get('consultado_en'))],
+    ],[WIDTH*.3,WIDTH*.3,WIDTH*.4]))
+    story.extend([Spacer(1,10),p(f"Publicación NVD: {_date(datos_nvd.get('fecha_publicacion'))} · Modificación: {_date(datos_nvd.get('fecha_modificacion'))}",'small'),
+                  p('Descripción completa · NVD','sub')])
+    # Paragraphs split across pages, including very long descriptions from imported records.
+    for paragraph in desc.split('\n\n'): story.append(p(paragraph))
+    story.append(p('Clasificación y condiciones técnicas','sub'))
+    story.append(p(f"Tipo registrado: {score.get('tipo_vulnerabilidad') or 'No disponible'} · CWE: {', '.join(datos_nvd.get('cwes') or []) or 'No disponible'}"))
+    vector=datos_nvd.get('vector_ataque') or {}
     if vector:
-        story.append(_section_bar("Vector de ataque"))
-        story.append(sp(6))
-
-        MEANINGS = {
-            "attackVector":       {
-                "NETWORK":  "Explotable remotamente por red",
-                "ADJACENT": "Requiere acceso a red adyacente",
-                "LOCAL":    "Requiere acceso local al sistema",
-                "PHYSICAL": "Requiere acceso fisico al dispositivo",
-            },
-            "attackComplexity":   {
-                "LOW":  "Baja — no se requieren condiciones especiales",
-                "HIGH": "Alta — requiere condiciones especificas",
-            },
-            "privilegesRequired": {
-                "NONE": "Sin credenciales — cualquier atacante puede explotarlo",
-                "LOW":  "Cuenta de usuario basica suficiente",
-                "HIGH": "Requiere privilegios de administrador",
-            },
-            "userInteraction":    {
-                "NONE":     "Sin interaccion del usuario — totalmente automatizado",
-                "REQUIRED": "La victima debe realizar una accion",
-            },
-        }
-        NAMES = {
-            "attackVector":       "Vector de acceso",
-            "attackComplexity":   "Complejidad",
-            "privilegesRequired": "Privilegios necesarios",
-            "userInteraction":    "Interaccion del usuario",
-        }
-        HIGH_RISK = {
-            "attackVector":       ["NETWORK"],
-            "attackComplexity":   ["LOW"],
-            "privilegesRequired": ["NONE"],
-            "userInteraction":    ["NONE"],
-        }
-
-        th_st = ParagraphStyle("vth", fontSize=8, fontName="Helvetica-Bold",
-                                textColor=WHITE, leading=12)
-        vrows = [[
-            Paragraph("Parametro",      th_st),
-            Paragraph("Valor",          th_st),
-            Paragraph("Interpretacion", th_st),
-        ]]
-        for campo, valor in vector.items():
-            meaning = MEANINGS.get(campo, {}).get(valor, valor)
-            bad     = valor in HIGH_RISK.get(campo, [])
-            v_hex   = "#dc2626" if bad else "#16a34a"
-            vrows.append([
-                Paragraph(_x(NAMES.get(campo, campo)),
-                    ParagraphStyle("vn", fontSize=8, fontName="Helvetica-Bold",
-                                    textColor=colors.HexColor("#1e40af"), leading=12)),
-                Paragraph(f'<font color="{v_hex}">{_x(valor)}</font>',
-                    ParagraphStyle("vv", fontSize=8, fontName="Helvetica-Bold",
-                                    textColor=TXT, leading=12)),
-                Paragraph(_x(meaning),
-                    ParagraphStyle("vm", fontSize=8, fontName="Helvetica",
-                                    textColor=TXT, leading=12)),
-            ])
-
-        vt = Table(vrows, colWidths=[3.8 * cm, 2.6 * cm, CW - 6.4 * cm])
-        vt.setStyle(TableStyle([
-            ("BACKGROUND",     (0, 0), (-1,  0), NAVY),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, SURF2]),
-            ("GRID",           (0, 0), (-1, -1), 0.3, BORDER),
-            ("TOPPADDING",     (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING",  (0, 0), (-1, -1), 5),
-            ("LEFTPADDING",    (0, 0), (-1, -1), 8),
-            ("VALIGN",         (0, 0), (-1, -1), "TOP"),
-        ]))
-        story += [vt, sp(10)]
-
-    # ── 8. Analisis tecnico ───────────────────────────────────────────────
-    if analisis.get("analisis_tecnico"):
-        story.append(_section_bar("Analisis tecnico"))
-        story.append(sp(6))
-        story.extend(_md(analisis["analisis_tecnico"], S))
-        story.append(sp(10))
-
-    # ── 9. Plan de mitigacion ─────────────────────────────────────────────
-    if analisis.get("plan_mitigacion"):
-        story.append(_section_bar("Plan de mitigacion", "#16a34a"))
-        story.append(sp(6))
-        story.extend(_md(analisis["plan_mitigacion"], S))
-        story.append(sp(12))
-
-    cb = _page_fn(cve, fecha)
-    doc.build(story, onFirstPage=cb, onLaterPages=cb)
-    buf.seek(0)
-    return buf.read()
+        names={'attackVector':'Vector de acceso','attackComplexity':'Complejidad','privilegesRequired':'Privilegios requeridos','userInteraction':'Interacción de usuario'}
+        story.append(table(['ATRIBUTO CVSS','VALOR REGISTRADO'],[[names.get(k,k),v] for k,v in vector.items()],[WIDTH*.5]*2))
+        story.append(p('El vector describe condiciones técnicas; por sí solo no demuestra exposición a Internet ni explotación del activo.','small'))
+    if kev:
+        story.append(p('Acción publicada por CISA','sub'))
+        story.append(p(datos_kev.get('accion_requerida') or 'No consta una acción en esta instantánea.'))
+        story.append(p(f"Incluida en KEV: {_date(datos_kev.get('fecha_añadido'))}. Fecha de directiva: {_date(datos_kev.get('fecha_limite'))}. Su obligatoriedad depende del ámbito de la directiva; no es un plazo universal.",'small'))
+    story.append(p('Contexto de activos','sub')); story.append(p(context))
+    if equipos_afectados:
+        for asset in equipos_afectados:
+            story.append(table(['ACTIVO RELACIONADO','ESTADO DECLARADO / OBSERVADO'],[
+                [asset.get('nombre','Sin nombre'),asset.get('estado','Sin estado registrado')],
+                ['Criticidad / exposición',f"{asset.get('criticidad','desconocida')} / {asset.get('exposicion','desconocida')}"],
+                ['Coincidencias',', '.join(asset.get('coincidencias') or []) or 'Sin detalle'],
+            ],[WIDTH*.35,WIDTH*.65]))
+            story.append(p(asset.get('limitacion') or 'Revisar configuración. No confirma compromiso.','small'))
+    else: story.append(p('No se adjuntan activos relacionados en esta exportación.','small'))
+    story.append(p('Referencias para contrastar el análisis','sub'))
+    refs=[f'https://nvd.nist.gov/vuln/detail/{cve}','https://www.cisa.gov/known-exploited-vulnerabilities-catalog','https://www.first.org/epss/']
+    refs.extend(datos_nvd.get('referencias') or [])
+    seen=set()
+    for ref in refs:
+        if isinstance(ref,dict):ref=ref.get('url')
+        url=safe_url(ref)
+        if not url or url in seen:continue
+        seen.add(url)
+        story.append(Paragraph(f'<b>{len(seen):02d}.</b> <a href="{_x(url)}" color="#176477">{_x(url)}</a>',S['small']))
+    story.append(p('Referencia documental '+reference+': identificador derivado del contenido exportado; no es una firma digital.','small'))
+    story.append(CondPageBreak(250))
+    section('04','Análisis asistido','Contenido generado por IA, separado de las evidencias y del cálculo del motor. Requiere revisión técnica antes de utilizarlo para decidir o actuar.')
+    if analisis.get('error'): story.append(p('Estado de la generación: '+str(analisis['error'])))
+    if analisis.get('alucinacion_detectada'): story.append(p('Advertencia registrada: posibles afirmaciones no respaldadas. Contrasta el texto con las fuentes.','sub'))
+    found=False
+    for title,key in [('Resumen ejecutivo','resumen_ejecutivo'),('Análisis técnico','analisis_tecnico'),('Plan de mitigación','plan_mitigacion')]:
+        if analisis.get(key):
+            found=True
+            story.append(p(title,'sub'))
+            story.extend(markdown_flowables(analisis[key],S,WIDTH,skip_title=title))
+            story.append(Spacer(1,12))
+    if not found:
+        story.append(p('No se ha generado análisis con IA para esta instantánea. El score, sus factores y las evidencias anteriores pueden utilizarse independientemente del proveedor de IA.'))
+    story.append(p('Revisión antes de actuar','sub'))
+    for text in ['Verifica producto, versión y configuración de los activos.',
+                 'Contrasta versiones corregidas y medidas con los avisos originales del proveedor.',
+                 'Valida las medidas en tu entorno y registra la decisión de remediación.']:
+        story.append(p('• '+text))
+    draw=_page(cve,reference)
+    doc.build(story,onFirstPage=draw,onLaterPages=draw)
+    return buf.getvalue()

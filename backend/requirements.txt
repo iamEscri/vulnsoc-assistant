@@ -6,3 +6,4 @@ reportlab>=4.4,<5
 python-dotenv>=1,<2
 groq>=1,<2
 httpx>=0.28,<1
+mistune>=3.2,<4

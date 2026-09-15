@@ -115,3 +115,18 @@ La interfaz, la API web, los PDF y el contexto enviado a IA utilizan `score_inte
 Consulta las reglas y límites en [docs-methodology.md](../docs-methodology.md). La consulta real de Log4Shell devuelve 160 puntos y prioridad crítica con CVSS, KEV y EPSS disponibles. Los ejemplos fechados de la home se han evaluado con política 2.0: Log4Shell 160, Terrapin 89. Los valores 225/119 anteriores corresponden a la metodología histórica y no son comparables directamente.
 
 El despliegue actualiza el formato de caché de fuentes. La clave de IA incorpora fuentes, score y versión de metodología. Los historiales del navegador se conservan: la interfaz permite reanalizar explícitamente. La criticidad y la exposición se aplican solo con compatibilidad de versión, no por coincidencia de fabricante.
+
+## Informe PDF · VulnSOC Intelligence Brief
+
+La exportación organiza la instantánea en decisión y alcance, trazabilidad del score, evidencias técnicas y análisis asistido opcional. Conserva la descripción completa de NVD, referencias enlazadas, advertencias, fecha del análisis y activos relacionados cuando están disponibles. La fecha de exportación se indica por separado, en UTC. No consulta nuevas fuentes ni recalcula el score.
+
+El Markdown se convierte mediante Mistune en títulos, listas, tablas y código. El HTML aportado se trata como texto; no se descargan imágenes externas. Las tablas de más de cinco columnas se presentan como registros etiquetados para conservar la legibilidad en A4. Las fuentes tipográficas se incluyen en `modules/report_fonts/`, junto a su licencia, y se copian a la imagen con los módulos.
+
+Para actualizar esta versión, reconstruye los servicios desde la raíz del repositorio:
+
+```bash
+git pull --ff-only origin main
+sudo docker compose up -d --build
+```
+
+No es necesario volver a generar el análisis de IA: exportar un resultado guardado aplica la nueva maquetación. Las pruebas `tests/test_pdf.py` comprueban paginación, contenido largo, Markdown y datos incompletos. Las comprobaciones de extracción de texto requieren `pdftotext` (Poppler) en el entorno de pruebas; no es necesario para servir la aplicación.

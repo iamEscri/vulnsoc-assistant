@@ -43,6 +43,8 @@ class ReportRequest(BaseModel):
     resultado: dict
     score: dict
     analisis: dict = Field(default_factory=dict)
+    equipos_afectados: list[dict] = Field(default_factory=list, max_length=500)
+    fecha: str | None = None
 
 @app.middleware('http')
 async def protect(request: Request, call_next):
@@ -149,7 +151,7 @@ def report(payload: ReportRequest):
     try:
         result=payload.resultado
         if result['nvd']['cve_id'] != payload.cve_id: raise ValueError()
-        pdf=generar_pdf(result['nvd'], result['kev'], result['epss'], payload.score, payload.analisis)
+        pdf=generar_pdf(result['nvd'], result['kev'], result['epss'], payload.score, payload.analisis, equipos_afectados=payload.equipos_afectados, fecha_analisis=payload.fecha)
     except (KeyError, ValueError, TypeError, AttributeError):
         raise HTTPException(422,'El análisis importado no contiene datos válidos para el informe.')
     return Response(pdf,media_type='application/pdf',headers={'Content-Disposition':f'attachment; filename="VulnSOC-{payload.cve_id}.pdf"'})
