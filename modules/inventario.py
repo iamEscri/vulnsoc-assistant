@@ -178,5 +178,5 @@ def equipos_afectados(inventario: dict, productos_afectados: list,
                 ecosystem.append(tech)
         if coincidencias or ecosystem:
             state = 'version_compatible' if any(e['estado'] == 'version_compatible' for e in evidence) else 'posible' if any(e['estado'] == 'posible' for e in evidence) or ecosystem else 'fuera_de_rango'
-            result.append({'nombre': asset.get('nombre', 'Sin nombre'), 'criticidad': asset.get('criticidad', 'media'), 'exposicion': asset.get('exposicion', 'desconocida'), 'coincidencias': coincidencias, 'coincidencias_plataforma': ecosystem, 'estado': state, 'evidencias': evidence, 'limitacion': 'Compatibilidad de producto/versión; verificar configuración y aplicabilidad. No confirma explotación ni compromiso.'})
+            result.append({'nombre': asset.get('nombre', 'Sin nombre'), 'ip': asset.get('ip', ''), 'criticidad': asset.get('criticidad', 'media'), 'exposicion': asset.get('exposicion', 'desconocida'), 'coincidencias': coincidencias, 'coincidencias_plataforma': ecosystem, 'estado': state, 'evidencias': evidence, 'limitacion': 'Compatibilidad de producto/versión; verificar configuración y aplicabilidad. No confirma explotación ni compromiso.'})
     return result

@@ -152,3 +152,10 @@ footer{border-color:#7191a446}footer>div:first-child b{color:#aacbde}
  .score-verdict>p{grid-column:1/-1;grid-row:auto;margin:12px 0 0}
  .score-verdict>.text-link{grid-column:1/-1;grid-row:auto;justify-self:start;margin-top:16px}
 }
+
+.related-asset-copy{min-width:0;flex:1}
+.related-asset-meta{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:13px;line-height:1.6;color:#bfd5e1}
+.related-asset-meta>span{overflow-wrap:anywhere}
+.related-asset-meta strong{font-weight:600}
+.related-asset-meta .asset-criticality{padding:0 7px;border:1px solid;border-radius:4px}
+@media(max-width:750px){.related-asset{flex-wrap:wrap}.related-asset>.neutral-badge{margin-left:39px;white-space:normal}}
