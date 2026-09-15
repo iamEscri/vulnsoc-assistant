@@ -159,3 +159,9 @@ footer{border-color:#7191a446}footer>div:first-child b{color:#aacbde}
 .related-asset-meta strong{font-weight:600}
 .related-asset-meta .asset-criticality{padding:0 7px;border:1px solid;border-radius:4px}
 @media(max-width:750px){.related-asset{flex-wrap:wrap}.related-asset>.neutral-badge{margin-left:39px;white-space:normal}}
+
+/* Asset applicability: unknown remains amber, compatible red, outside range green. */
+.related-asset>.related-asset-status{font-size:14px;font-weight:600;line-height:1.5;padding:7px 12px;border:1px solid #c6ab6399;border-radius:6px;background:#78653850;color:#f7df95;white-space:normal;max-width:300px;flex-shrink:0}
+.related-asset>.related-asset-status[data-state="version_compatible"]{color:#ffc0c5;background:#753e535e;border-color:#d9839299}
+.related-asset>.related-asset-status[data-state="fuera_de_rango"]{color:#b4e9c4;background:#30695160;border-color:#7ebe9999}
+@media(max-width:750px){.related-asset>.related-asset-status{max-width:calc(100% - 39px)}}
