@@ -8,6 +8,10 @@ test('analysis, persistent history, exports and responsive intelligence interfac
  await page.screenshot({path:'artifacts/precision-empty.png',fullPage:true});
  await page.getByLabel('Identificador CVE').fill('CVE-2021-44228');await page.getByRole('button',{name:'Investigar',exact:true}).click();
  await expect(page.getByRole('heading',{name:'CVE-2021-44228',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Revisar activos',exact:true}).click();
+ await expect(page.getByRole('tab',{name:'Activos relacionados',exact:true})).toHaveAttribute('aria-selected','true');
+ await expect(page.getByRole('tab',{name:'Activos relacionados',exact:true})).toBeFocused();
+ await expect(page.getByRole('heading',{name:'Relación con tu inventario'})).toBeInViewport();
  await page.getByRole('tab',{name:'Evidencias y scoring'}).click();await expect(page.getByText('Cómo se calcula la prioridad')).toBeVisible();
  await page.getByRole('tab',{name:'Resumen',exact:true}).click();await page.screenshot({path:'artifacts/precision-detail.png',fullPage:true});
  await page.reload();await page.getByRole('button',{name:/^Historial/}).click();await expect(page.getByRole('button',{name:'CVE-2021-44228',exact:true})).toBeVisible();
@@ -98,9 +102,9 @@ test('unknown evidence stays unknown in detail and history',async({page})=>{
 });
 
 test('historical report can be updated to the current methodology',async({page})=>{
- await page.goto('/');await page.getByRole('button',{name:'Historial',exact:true}).click();await page.locator('input[type=file]').setInputFiles({name:'legacy.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify([fixture]))});await page.getByRole('button',{name:fixture.cve_id,exact:true}).click();await expect(page.getByText('Informe histórico · metodología anterior',{exact:true})).toBeVisible();
+ await page.goto('/');await page.getByRole('button',{name:'Historial',exact:true}).click();await page.locator('input[type=file]').setInputFiles({name:'legacy.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify([fixture]))});await page.getByRole('button',{name:fixture.cve_id,exact:true}).click();await expect(page.getByText('Actualiza para revisar las evidencias',{exact:true})).toBeVisible();
  await page.route('**/api/analyze',r=>r.fulfill({json:{...fixture,score_interno:160,score:{score_interno:160,prioridad:'CRÍTICA',metodologia_version:'2.0',provisional:false,advertencias:[],factores:[{factor:'CVSS',puntos:100,detalle:'10/10'},{factor:'KEV',puntos:60,detalle:'Explotación documentada'}]}}}));
- await page.getByRole('button',{name:'Actualizar análisis',exact:true}).click();await expect(page.getByText('Metodología 2.0',{exact:true})).toBeVisible();await expect(page.locator('.internal-number')).toHaveText('160pts');
+ await page.getByRole('button',{name:'Actualizar análisis',exact:true}).click();await expect(page.getByText('Priorización orientativa',{exact:true})).toBeVisible();await expect(page.locator('.internal-number')).toHaveText('160pts');
 });
 
 test('saved AI Markdown renders in analysis and mitigation without regeneration',async({page})=>{

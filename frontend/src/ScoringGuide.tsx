@@ -7,7 +7,7 @@ export function ScoringGuide({ expanded = false }: { expanded?: boolean }) {
  const content = <>
   <div className="scoring-guide-content">
    <h3>Severidad + explotación + contexto del activo</h3>
-   <p>La severidad es solo el principio; el contexto define la prioridad. VulnSOC 2.0 utiliza puntos para ordenar la atención, no para expresar un porcentaje de riesgo.</p>
+   <p>La severidad es solo el principio; el contexto define la prioridad. VulnSOC utiliza puntos para ordenar la atención, no para expresar un porcentaje de riesgo.</p>
    <div className="scoring-rules">
     <section><h4>01 · Severidad</h4><p><strong>CVSS × 10</strong>, redondeado a puntos enteros. CVSS 7,2 aporta 72 puntos. CWE, vector de ataque y antigüedad no añaden bonificaciones.</p></section>
     <section><h4>02 · Explotación</h4><p><strong>KEV confirmado: +60.</strong> EPSS se muestra como información y no suma: la evidencia de explotación tiene precedencia sobre la predicción.</p><p>Sin KEV confirmado, se aplica un único tramo EPSS:</p><ul><li>Menos del 1 %: +0</li><li>Desde el 1 % hasta menos del 10 %: +10</li><li>Desde el 10 % hasta menos del 70 %: +20</li><li>Desde el 70 %: +30</li></ul><p>Si KEV no se puede verificar, se advierte de ello; no equivale a estar fuera del catálogo.</p></section>
@@ -24,7 +24,7 @@ export function ScoringGuide({ expanded = false }: { expanded?: boolean }) {
      <h4>¿Cómo se sabe si está expuesto a Internet?</h4><p><strong>Lo indicas tú</strong> en Inventario de activos → Añadir o editar activo → Exposición declarada. Elige «Accesible desde Internet» si el servicio recibe conexiones desde Internet, por ejemplo un servidor web público. Poder navegar o descargar actualizaciones desde el equipo no significa que esté expuesto.</p><p>VulnSOC no escanea puertos ni lo deduce de la IP. Si no conoces la configuración de red, selecciona «Desconocida» y consúltala con quien administra el servicio. Ese estado aporta +0 por exposición y, si hay un activo compatible seleccionado, genera una advertencia.</p>
      <p>Sin coincidencia verificable no se suma ni se resta. La compatibilidad no confirma compromiso. Tras modificar el inventario, actualiza el análisis para incorporar el cambio.</p></section>
    </div>
-   <section className="priority-guide" aria-label="Umbrales de prioridad"><h3>Del total de puntos a la prioridad</h3><p>Compara el total con estos intervalos. Son umbrales propios de VulnSOC 2.0, no categorías CVSS.</p><div className="priority-bands">{[
+   <section className="priority-guide" aria-label="Umbrales de prioridad"><h3>Del total de puntos a la prioridad</h3><p>Compara el total con estos intervalos. Son umbrales propios de VulnSOC, no categorías CVSS.</p><div className="priority-bands">{[
     ['Baja','0–54','low','Mantener seguimiento. Baja prioridad no implica ausencia de riesgo.'],
     ['Media','55–89','medium','Evaluar en el ciclo de gestión y seguir nuevas evidencias.'],
     ['Alta','90–129','high','Revisar la aplicabilidad y planificar la remediación con prioridad.'],
@@ -41,7 +41,7 @@ export function ScoringGuide({ expanded = false }: { expanded?: boolean }) {
    </section>
    <p><strong>Prioridad y aplicabilidad son distintas.</strong> Una CVE puede ser crítica y estar pendiente de comprobar en tus activos. Las advertencias indican qué falta verificar; no prueban que tu entorno esté afectado o protegido.</p>
    <p>Los pesos y los umbrales son una política propia, no una fórmula validada estadísticamente. 128 y 130 son puntuaciones próximas aunque cambie la etiqueta. Con estas reglas, el máximo posible es 195 puntos (100 + 60 + 35); crítica empieza en 130, no en 195. EPSS no mide la probabilidad de compromiso de tu activo y un 100,0 % mostrado puede ser un redondeo.</p>
-   <p>Los informes históricos conservan su metodología: actualiza el análisis para aplicar estas reglas. La IA no asigna los puntos.</p>
+   <p>La IA no asigna los puntos. Actualiza el análisis para incorporar nuevas evidencias y cambios en tus activos.</p>
    <p>Fuentes: <a href="https://nvd.nist.gov/vuln-metrics/cvss" target="_blank" rel="noreferrer">NVD / CVSS</a> · <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" rel="noreferrer">CISA KEV</a> · <a href="https://www.first.org/epss/faq" target="_blank" rel="noreferrer">FIRST / EPSS y explotación conocida</a>. Estas fuentes no establecen los pesos de VulnSOC.</p>
   </div>
  </>;

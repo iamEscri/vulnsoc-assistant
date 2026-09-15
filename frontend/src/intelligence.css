@@ -142,3 +142,13 @@ footer{border-color:#7191a446}footer>div:first-child b{color:#aacbde}
 .scoring-equation { font-family: monospace; overflow-wrap: anywhere; }
 .factor-zero-reason { margin: 0; padding: 0 20px 14px 40px; color: #c2dfe9; font-size: 15px; line-height: 1.5; }
 @media(max-width: 800px) { .scoring-rules { grid-template-columns: 1fr; } .scoring-guide-content { padding: 0 16px 16px; } .score-lab > .scoring-guide { margin: 16px; } .scoring-example { padding: 16px; } }
+
+/* Give the verdict enough reading width without stretching the factor area. */
+@media(min-width:1101px){.score-lab-layout{grid-template-columns:minmax(0,1fr) 340px}}
+.score-verdict>p{margin:12px 0}
+.score-verdict>.badge{margin-bottom:4px}
+#detail-sections{scroll-margin-top:110px}
+@media(max-width:750px){
+ .score-verdict>p{grid-column:1/-1;grid-row:auto;margin:12px 0 0}
+ .score-verdict>.text-link{grid-column:1/-1;grid-row:auto;justify-self:start;margin-top:16px}
+}

@@ -160,7 +160,7 @@ def generar_pdf(datos_nvd, datos_kev, datos_epss, score, analisis, equipos_afect
     hero.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),NAVY),('BACKGROUND',(1,0),(1,0),tone),
         ('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),18),('RIGHTPADDING',(0,0),(-1,-1),18),
         ('TOPPADDING',(0,0),(-1,-1),18),('BOTTOMPADDING',(0,0),(-1,-1),16)]))
-    story.extend([hero,Spacer(1,12),p(f'Exportado: {generated}   ·   Metodología: {version}', 'small'),
+    story.extend([hero,Spacer(1,12),p(f'Exportado: {generated}', 'small'),
                   p(f'Análisis guardado: {_date(fecha_analisis)}   ·   Referencia: {reference}', 'small'),Spacer(1,12)])
     section('01','Decisión y alcance')
     action = score.get('accion_recomendada') or 'Revisar evidencias y aplicabilidad. El informe conserva la metodología original.'

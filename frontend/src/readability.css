@@ -24,8 +24,8 @@ main:not(.methodology-main) .table-tools { flex-wrap: wrap; }
  main:not(.methodology-main) .tabs { overflow-x: auto; }
  main:not(.methodology-main) .tabs button { white-space: nowrap; font-size: 14px; }
  main:not(.methodology-main) .score-verdict { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
- main:not(.methodology-main) .score-verdict>.threshold-legend { grid-column: 1/-1; grid-row: 6; margin-top: 18px; }
- main:not(.methodology-main) .score-verdict>p { grid-column: 1/-1; grid-row: 5; margin-top: 18px; }
+ main:not(.methodology-main) .score-verdict>.threshold-legend { grid-column: 1/-1; grid-row: auto; margin-top: 18px; }
+ main:not(.methodology-main) .score-verdict>p { grid-column: 1/-1; grid-row: auto; margin-top: 18px; }
  main:not(.methodology-main) .field :is(input,select,textarea) { font-size: 16px; }
  main:not(.methodology-main) .flow-mobile small { font-size: 12px; }
  main:not(.methodology-main) .entry-input { gap: 8px; }
