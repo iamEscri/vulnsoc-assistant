@@ -165,3 +165,7 @@ footer{border-color:#7191a446}footer>div:first-child b{color:#aacbde}
 .related-asset>.related-asset-status[data-state="version_compatible"]{color:#ffc0c5;background:#753e535e;border-color:#d9839299}
 .related-asset>.related-asset-status[data-state="fuera_de_rango"]{color:#b4e9c4;background:#30695160;border-color:#7ebe9999}
 @media(max-width:750px){.related-asset>.related-asset-status{max-width:calc(100% - 39px)}}
+
+.applicability-unknown{padding:20px;border:1px solid #c6ab6366;border-radius:8px;background:#78653825}
+.applicability-unknown>.neutral-badge{color:#f7df95;background:#78653850;border:1px solid #c6ab6399;font-size:14px;padding:7px 12px}
+.applicability-unknown>p{margin-top:12px;color:#e1d8b9;line-height:1.7}

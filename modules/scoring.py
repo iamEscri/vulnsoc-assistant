@@ -83,13 +83,17 @@ def calcular_score(datos_nvd, datos_kev, datos_epss=None):
 
 
 def ajustar_por_inventario(score, inventario, productos_afectados, plataformas_afectadas=None, cpe_afectados=None):
-    from modules.inventario import equipos_afectados, normalizar_inventario
+    from modules.inventario import equipos_afectados, normalizar_inventario, cpe_con_version, DATOS_INSUFICIENTES
     if not normalizar_inventario(inventario).get('equipos'):
         return score
     assets = equipos_afectados(inventario, productos_afectados, plataformas_afectadas, cpe_afectados)
     compatible = [a for a in assets if a['estado'] == 'version_compatible']
     result = {**score, 'factores': list(score['factores']), 'advertencias': list(score['advertencias'])}
-    if not compatible:
+    if not compatible and (not any(cpe_con_version(m) for m in cpe_afectados or []) or any(a['estado'] == 'datos_insuficientes' for a in assets)):
+        result['contexto_inventario'] = 'datos_insuficientes'
+        result['factores'].append({'factor': 'Inventario · datos insuficientes', 'puntos': 0, 'detalle': DATOS_INSUFICIENTES})
+        result['advertencias'].append(DATOS_INSUFICIENTES)
+    elif not compatible:
         state = 'pendiente_verificacion' if assets else 'sin_coincidencias'
         result['contexto_inventario'] = state
         result['factores'].append({'factor': 'Inventario · sin ajuste', 'puntos': 0, 'detalle': 'No se ha establecido compatibilidad de producto y versión. No se resta prioridad ni se declara el entorno seguro.'})

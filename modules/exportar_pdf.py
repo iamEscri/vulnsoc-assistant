@@ -179,6 +179,7 @@ def generar_pdf(datos_nvd, datos_kev, datos_epss, score, analisis, equipos_afect
     context = {
         'sin_inventario':'Sin inventario: este resultado no evalúa el riesgo de un entorno concreto.',
         'version_compatible':'Hay compatibilidad de versión. Verifica la configuración; no confirma compromiso.',
+        'datos_insuficientes':'Las fuentes todavía no proporcionan información suficiente de producto y versiones afectadas para comprobar esta CVE contra el inventario.',
         'pendiente_verificacion':'Aplicabilidad pendiente: revisa producto, versión y configuración.',
         'sin_coincidencias':'Sin coincidencias verificadas. No demuestra ausencia de riesgo en el entorno.',
     }.get(score.get('contexto_inventario'), 'El informe no registra un estado de aplicabilidad al inventario.')

@@ -122,3 +122,13 @@ test('saved AI Markdown renders in analysis and mitigation without regeneration'
  await expect(page.locator('.analysis-markdown h4')).toHaveText('Descripción de la vulnerabilidad');
  await page.locator('.analysis-markdown').screenshot({path:'artifacts/ai-markdown-mobile.png'});
 });
+
+test('missing source coverage is explicit even without related assets',async({page})=>{
+ const message='Las fuentes todavía no proporcionan información suficiente de producto y versiones afectadas para comprobar esta CVE contra el inventario.';
+ await page.route('**/api/analyze',r=>r.fulfill({json:{...fixture,equipos_afectados:[],score:{...fixture.score,contexto_inventario:'datos_insuficientes',advertencias:[message],provisional:true}}}));
+ await page.goto('/');await page.getByLabel('Identificador CVE').fill(fixture.cve_id);await page.getByRole('button',{name:'Investigar',exact:true}).click();
+ await page.getByRole('button',{name:'Revisar activos',exact:true}).click();
+ await expect(page.locator('.applicability-unknown')).toContainText('Aplicabilidad no comprobable');
+ await expect(page.locator('.applicability-unknown')).toContainText(message);
+ await expect(page.getByText('Sin coincidencias registradas',{exact:true})).toHaveCount(0);
+});

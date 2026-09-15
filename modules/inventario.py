@@ -147,6 +147,19 @@ def _identidad_tecnologia(text):
     return (normalizar_nombre(match[1]), match[2]) if match else (normalizar_nombre(text), None)
 
 
+DATOS_INSUFICIENTES = 'Las fuentes todavía no proporcionan información suficiente de producto y versiones afectadas para comprobar esta CVE contra el inventario.'
+
+
+def cpe_con_version(match):
+    """Source coverage only; does not decide compatibility or interpret versions."""
+    if not match:
+        return False
+    parts = partes_cpe(match.get('criteria', ''))
+    return bool(parts and parts[4] not in ('*', '-') and (
+        parts[5] not in ('*', '-') or any(match.get(key) for key in (
+            'versionStartIncluding', 'versionStartExcluding', 'versionEndIncluding', 'versionEndExcluding'))))
+
+
 def equipos_afectados(inventario: dict, productos_afectados: list,
                       plataformas_afectadas: list = None, cpe_afectados: list = None) -> list:
     """Candidates, never confirmed affected hosts. Exact product identity first.
@@ -171,12 +184,12 @@ def equipos_afectados(inventario: dict, productos_afectados: list,
             candidates = [m for names, m in catalog if identity and identity in names]
             if candidates:
                 statuses = [version_en_rango(version, m) if m else None for m in candidates]
-                state = 'version_compatible' if True in statuses else 'posible' if None in statuses else 'fuera_de_rango'
+                state = 'version_compatible' if True in statuses else 'datos_insuficientes' if not any(cpe_con_version(m) for m in candidates) else 'posible' if None in statuses else 'fuera_de_rango'
                 coincidencias.append(tech)
                 evidence.append({'tecnologia': tech, 'estado': state, 'version': version, 'criterios': [m['criteria'] for m in candidates if m]})
             elif identity in platforms:
                 ecosystem.append(tech)
         if coincidencias or ecosystem:
-            state = 'version_compatible' if any(e['estado'] == 'version_compatible' for e in evidence) else 'posible' if any(e['estado'] == 'posible' for e in evidence) or ecosystem else 'fuera_de_rango'
-            result.append({'nombre': asset.get('nombre', 'Sin nombre'), 'ip': asset.get('ip', ''), 'criticidad': asset.get('criticidad', 'media'), 'exposicion': asset.get('exposicion', 'desconocida'), 'coincidencias': coincidencias, 'coincidencias_plataforma': ecosystem, 'estado': state, 'evidencias': evidence, 'limitacion': 'Compatibilidad de producto/versión; verificar configuración y aplicabilidad. No confirma explotación ni compromiso.'})
+            state = 'version_compatible' if any(e['estado'] == 'version_compatible' for e in evidence) else 'datos_insuficientes' if any(e['estado'] == 'datos_insuficientes' for e in evidence) else 'posible' if any(e['estado'] == 'posible' for e in evidence) or ecosystem else 'fuera_de_rango'
+            result.append({'nombre': asset.get('nombre', 'Sin nombre'), 'ip': asset.get('ip', ''), 'criticidad': asset.get('criticidad', 'media'), 'exposicion': asset.get('exposicion', 'desconocida'), 'coincidencias': coincidencias, 'coincidencias_plataforma': ecosystem, 'estado': state, 'evidencias': evidence, 'limitacion': DATOS_INSUFICIENTES if state == 'datos_insuficientes' else 'Compatibilidad de producto/versión; verificar configuración y aplicabilidad. No confirma explotación ni compromiso.'})
     return result
