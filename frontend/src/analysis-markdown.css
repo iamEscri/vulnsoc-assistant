@@ -16,7 +16,8 @@
 .analysis-markdown pre code { padding: 0; background: none; }
 .markdown-table-scroll { max-width: 100%; overflow-x: auto; margin: 24px 0; border: 1px solid #638197; border-radius: 8px; }
 .analysis-markdown table { width: 100%; border-collapse: collapse; }
-.analysis-markdown :is(th,td) { white-space: normal; vertical-align: top; text-align: left; font-size: 15px; line-height: 1.7; padding: 14px 18px; border-bottom: 1px solid #53758c; min-width: 100px; }
+.analysis-markdown :is(th,td) { white-space: normal; overflow-wrap: normal; word-break: normal; hyphens: none; vertical-align: top; text-align: left; font-size: 15px; line-height: 1.7; padding: 14px 18px; border-bottom: 1px solid #53758c; min-width: 100px; }
+.analysis-markdown :is(th,td) :is(a,code) { overflow-wrap: anywhere; }
 .analysis-markdown th { background: #28475f; color: #e2d7f1; font-weight: 700; }
 .analysis-markdown tr:last-child td { border-bottom: 0; }
 @media(max-width:600px) { .analysis-markdown :is(th,td) { padding: 12px; } .analysis-markdown :is(h4,h5,h6) { font-size: 18px; } }
